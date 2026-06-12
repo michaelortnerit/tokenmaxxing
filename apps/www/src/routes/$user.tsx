@@ -1,20 +1,263 @@
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import type { ProfileDailyRow } from "@tokenmaxxing/api-contract";
+
+type DailyRow = typeof ProfileDailyRow.Type;
+
+import { AreaChart } from "../components/charts/area-chart";
+import { Heatmap } from "../components/charts/heatmap";
+import { MonthBars } from "../components/charts/month-bars";
+import {
+  enumerateDays,
+  familyColors,
+  formatDay,
+  formatTokens,
+  formatUsd,
+  modelFamily,
+} from "../components/charts/scale";
+import { Legend, StackedBars, type StackedDay } from "../components/charts/stacked-bars";
+import { StatCard } from "../components/stat-card";
+import { profileDailyQuery, profileQuery } from "../lib/queries";
 
 const Route = createFileRoute("/$user")({
   component: ProfilePage,
 });
 
+/** The daily-bars chart stays readable up to roughly this many days. */
+const DAILY_WINDOW = 184;
+
 function ProfilePage() {
   const { user } = Route.useParams();
+  const profile = useQuery(profileQuery(user));
+  const daily = useQuery(profileDailyQuery(user));
+
+  if (profile.isPending || daily.isPending) {
+    return <p className="text-sm text-muted-foreground">Loading profile…</p>;
+  }
+
+  if (profile.isError || daily.isError) {
+    return (
+      <div className="mt-24 text-center">
+        <h1 className="text-xl font-semibold">No profile for “{user}”</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Either it does not exist or nothing has been synced yet.
+        </p>
+      </div>
+    );
+  }
+
+  const { stats } = profile.data;
+  const owner = profile.data.user;
 
   return (
-    <div>
-      <h1 className="text-2xl font-semibold tracking-tight">{user}</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Profile dashboards land with the leaderboard milestone.
-      </p>
+    <div className="flex flex-col gap-6">
+      <header className="flex items-center gap-4">
+        {owner.avatarUrl === null ? (
+          <div className="size-14 rounded-full bg-muted" />
+        ) : (
+          <img alt="" className="size-14 rounded-full" src={owner.avatarUrl} />
+        )}
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">{owner.login}</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            {stats.firstDate !== null && stats.lastDate !== null ? (
+              <>
+                <span className="font-medium text-foreground">{formatDay(stats.firstDate)}</span>
+                {" → "}
+                <span className="font-medium text-foreground">{formatDay(stats.lastDate)}</span>
+                {` · ${stats.activeDays} active days`}
+                {stats.sources.length > 0 ? ` · agents: ${stats.sources.join(", ")}` : ""}
+                {stats.deviceCount > 1 ? ` · ${stats.deviceCount} devices` : ""}
+              </>
+            ) : (
+              "Nothing synced yet."
+            )}
+          </p>
+        </div>
+      </header>
+
+      {daily.data.days.length === 0 ? (
+        <p className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">
+          No usage yet — run{" "}
+          <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+            tokenmaxxing sync
+          </code>{" "}
+          to fill this page.
+        </p>
+      ) : (
+        <ProfileDashboard rows={daily.data.days} stats={stats} />
+      )}
     </div>
   );
+}
+
+interface DashboardStats {
+  activeDays: number;
+  avgSpendPerActiveDay: number;
+  firstDate: string | null;
+  lastDate: string | null;
+  peakDay: { date: string; spendUsd: number } | null;
+  topModel: { model: string; spendUsd: number } | null;
+  totalSpendUsd: number;
+  totalTokens: number;
+}
+
+function ProfileDashboard({ rows, stats }: { rows: readonly DailyRow[]; stats: DashboardStats }) {
+  const derived = useMemo(() => deriveCharts(rows), [rows]);
+
+  const calendarDays =
+    stats.firstDate !== null && stats.lastDate !== null
+      ? enumerateDays(stats.firstDate, stats.lastDate).length
+      : 0;
+
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <StatCard
+          label="Total spend"
+          sub="API-equivalent cost"
+          value={formatUsd(stats.totalSpendUsd)}
+        />
+        <StatCard
+          label="Total tokens"
+          sub={`${formatTokens(derived.outputTokens)} generated`}
+          value={formatTokens(stats.totalTokens)}
+        />
+        <StatCard
+          label="Active days"
+          sub={`of ${calendarDays} calendar days`}
+          value={String(stats.activeDays)}
+        />
+        <StatCard
+          label="Avg / active day"
+          sub="cost per day used"
+          value={formatUsd(stats.avgSpendPerActiveDay)}
+        />
+        <StatCard
+          label="Peak day"
+          sub={stats.peakDay === null ? "—" : formatDay(stats.peakDay.date)}
+          value={stats.peakDay === null ? "—" : formatUsd(stats.peakDay.spendUsd)}
+        />
+        <StatCard
+          label="Top model"
+          sub={stats.topModel === null ? "—" : `${formatUsd(stats.topModel.spendUsd)} total`}
+          value={stats.topModel === null ? "—" : modelFamily(stats.topModel.model)}
+        />
+      </div>
+
+      <section className="rounded-xl border border-border bg-card p-5">
+        <h2 className="font-medium">Daily spend</h2>
+        <p className="mt-0.5 text-sm text-muted-foreground">
+          Stacked by model family — hover for the per-day breakdown.
+        </p>
+        <div className="mt-3">
+          <Legend entries={derived.legend} />
+        </div>
+        <div className="mt-4">
+          <StackedBars days={derived.stackedDays} />
+        </div>
+      </section>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <section className="rounded-xl border border-border bg-card p-5">
+          <h2 className="font-medium">Cumulative spend</h2>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Running total since the first recorded day.
+          </p>
+          <div className="mt-4">
+            <AreaChart accent={derived.accent} points={derived.cumulative} />
+          </div>
+        </section>
+        <section className="rounded-xl border border-border bg-card p-5">
+          <h2 className="font-medium">Monthly spend</h2>
+          <p className="mt-0.5 text-sm text-muted-foreground">Total cost per calendar month.</p>
+          <div className="mt-4">
+            <MonthBars accent={derived.accent} months={derived.months} />
+          </div>
+        </section>
+      </div>
+
+      <section className="rounded-xl border border-border bg-card p-5">
+        <h2 className="font-medium">Activity heatmap</h2>
+        <p className="mt-0.5 text-sm text-muted-foreground">
+          Daily spend intensity, GitHub-style. Weeks run left to right.
+        </p>
+        <div className="mt-4 overflow-x-auto">
+          {derived.heatmap !== null ? (
+            <Heatmap
+              accent={derived.accent}
+              byDate={derived.spendByDate}
+              first={derived.heatmap.first}
+              last={derived.heatmap.last}
+            />
+          ) : null}
+        </div>
+      </section>
+    </>
+  );
+}
+
+function deriveCharts(rows: readonly DailyRow[]) {
+  const colors = familyColors(rows);
+  const accent = colors.values().next().value ?? "#f97316";
+
+  // Per-day totals and per-day family segments.
+  const spendByDate = new Map<string, number>();
+  const familiesByDate = new Map<string, Map<string, number>>();
+  let outputTokens = 0;
+  for (const row of rows) {
+    outputTokens += row.outputTokens;
+    spendByDate.set(row.date, (spendByDate.get(row.date) ?? 0) + row.costUsd);
+    const family = modelFamily(row.key);
+    const families = familiesByDate.get(row.date) ?? new Map<string, number>();
+    families.set(family, (families.get(family) ?? 0) + row.costUsd);
+    familiesByDate.set(row.date, families);
+  }
+
+  const first = rows[0]?.date ?? null;
+  const last = rows.at(-1)?.date ?? null;
+  const allDays = first !== null && last !== null ? enumerateDays(first, last) : [];
+
+  const familyOrder = [...colors.keys()];
+  const stackedDays: StackedDay[] = allDays.slice(-DAILY_WINDOW).map((date) => {
+    const families = familiesByDate.get(date);
+    return {
+      date,
+      segments: familyOrder.map((family) => ({
+        color: colors.get(family) ?? "#9ca3af",
+        family,
+        value: families?.get(family) ?? 0,
+      })),
+      total: spendByDate.get(date) ?? 0,
+    };
+  });
+
+  let running = 0;
+  const cumulative = allDays.map((date) => {
+    running += spendByDate.get(date) ?? 0;
+    return { date, value: running };
+  });
+
+  const byMonth = new Map<string, number>();
+  for (const [date, value] of spendByDate) {
+    const month = date.slice(0, 7);
+    byMonth.set(month, (byMonth.get(month) ?? 0) + value);
+  }
+  const months = [...byMonth.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([month, value]) => ({ month, value }));
+
+  return {
+    accent,
+    cumulative,
+    heatmap: first !== null && last !== null ? { first, last } : null,
+    legend: familyOrder.map((family) => ({ color: colors.get(family) ?? "#9ca3af", family })),
+    months,
+    outputTokens,
+    spendByDate,
+    stackedDays,
+  };
 }
 
 export { Route };

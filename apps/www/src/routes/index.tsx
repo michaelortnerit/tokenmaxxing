@@ -1,20 +1,165 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import type { LeaderboardMetric, LeaderboardWindow } from "@tokenmaxxing/api-contract";
+
+import { formatTokens, formatUsd } from "../components/charts/scale";
+import { leaderboardQuery } from "../lib/queries";
+
+interface LeaderboardSearch {
+  metric: typeof LeaderboardMetric.Type;
+  window: typeof LeaderboardWindow.Type;
+}
 
 const Route = createFileRoute("/")({
+  validateSearch: (search): LeaderboardSearch => ({
+    metric: search["metric"] === "tokens" ? "tokens" : "spend",
+    window: search["window"] === "7d" ? "7d" : search["window"] === "30d" ? "30d" : "all",
+  }),
   component: LeaderboardPage,
 });
 
+const WINDOWS: { label: string; value: typeof LeaderboardWindow.Type }[] = [
+  { label: "7 days", value: "7d" },
+  { label: "30 days", value: "30d" },
+  { label: "All time", value: "all" },
+];
+
+const METRICS: { label: string; value: typeof LeaderboardMetric.Type }[] = [
+  { label: "Spend", value: "spend" },
+  { label: "Tokens", value: "tokens" },
+];
+
 function LeaderboardPage() {
+  const { metric, window } = Route.useSearch();
+  const navigate = useNavigate({ from: Route.fullPath });
+  const leaderboard = useQuery(leaderboardQuery(metric, window));
+
   return (
     <div>
-      <h1 className="text-2xl font-semibold tracking-tight">Leaderboard</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        The leaderboard lands with the usage-sync milestone. Install the CLI and run{" "}
-        <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">tokenmaxxing sync</code>{" "}
-        to be on it at launch.
-      </p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Leaderboard</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Who is maxxing the most tokens. Join with{" "}
+            <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+              bunx @851-labs/tokenmaxxing login
+            </code>
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Toggle
+            onChange={(value) => navigate({ search: (prev) => ({ ...prev, metric: value }) })}
+            options={METRICS}
+            value={metric}
+          />
+          <Toggle
+            onChange={(value) => navigate({ search: (prev) => ({ ...prev, window: value }) })}
+            options={WINDOWS}
+            value={window}
+          />
+        </div>
+      </div>
+
+      <div className="mt-6 overflow-hidden rounded-xl border border-border">
+        {leaderboard.isPending ? (
+          <p className="p-6 text-sm text-muted-foreground">Loading the rankings…</p>
+        ) : leaderboard.isError ? (
+          <p className="p-6 text-sm text-muted-foreground">
+            Could not load the leaderboard; refresh to retry.
+          </p>
+        ) : leaderboard.data.entries.length === 0 ? (
+          <p className="p-6 text-sm text-muted-foreground">
+            Nobody on the board yet — be the first to sync.
+          </p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/50 text-left text-xs uppercase tracking-wider text-muted-foreground">
+                <th className="w-12 p-3 font-medium">#</th>
+                <th className="p-3 font-medium">User</th>
+                <th className="p-3 text-right font-medium">Spend</th>
+                <th className="p-3 text-right font-medium">Tokens</th>
+                <th className="hidden p-3 text-right font-medium sm:table-cell">Active days</th>
+                <th className="hidden p-3 text-right font-medium sm:table-cell">Last active</th>
+              </tr>
+            </thead>
+            <tbody>
+              {leaderboard.data.entries.map((entry) => (
+                <tr
+                  className="border-b border-border transition-colors last:border-b-0 hover:bg-muted/40"
+                  key={entry.user.id}
+                >
+                  <td className="p-3 font-mono text-muted-foreground">{entry.rank}</td>
+                  <td className="p-3">
+                    <Link
+                      className="flex items-center gap-2.5 font-medium hover:underline"
+                      params={{ user: entry.user.login }}
+                      to="/$user"
+                    >
+                      {entry.user.avatarUrl === null ? (
+                        <span className="size-6 rounded-full bg-muted" />
+                      ) : (
+                        <img
+                          alt=""
+                          className="size-6 rounded-full"
+                          loading="lazy"
+                          src={entry.user.avatarUrl}
+                        />
+                      )}
+                      {entry.user.login}
+                    </Link>
+                  </td>
+                  <td className="p-3 text-right font-mono tabular-nums">
+                    {formatUsd(entry.spendUsd)}
+                  </td>
+                  <td className="p-3 text-right font-mono tabular-nums">
+                    {formatTokens(entry.totalTokens)}
+                  </td>
+                  <td className="hidden p-3 text-right tabular-nums text-muted-foreground sm:table-cell">
+                    {entry.activeDays}
+                  </td>
+                  <td className="hidden p-3 text-right text-muted-foreground sm:table-cell">
+                    {entry.lastDate ?? "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Toggle<Value extends string>({
+  onChange,
+  options,
+  value,
+}: {
+  onChange: (value: Value) => void;
+  options: { label: string; value: Value }[];
+  value: Value;
+}) {
+  return (
+    <div className="flex rounded-lg border border-border p-0.5">
+      {options.map((option) => (
+        <button
+          className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+            option.value === value
+              ? "bg-foreground text-background"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+          key={option.value}
+          onClick={() => onChange(option.value)}
+          type="button"
+        >
+          {option.label}
+        </button>
+      ))}
     </div>
   );
 }
 
 export { Route };
+
+export type { LeaderboardSearch };
