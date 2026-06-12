@@ -11,7 +11,6 @@ import { MonthBars } from "../components/charts/month-bars";
 import {
   enumerateDays,
   familyColors,
-  formatDay,
   formatTokens,
   formatUsd,
   modelFamily,
@@ -58,23 +57,7 @@ function ProfilePage() {
         ) : (
           <img alt="" className="size-14 rounded-full" src={owner.avatarUrl} />
         )}
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{owner.login}</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            {stats.firstDate !== null && stats.lastDate !== null ? (
-              <>
-                <span className="font-medium text-foreground">{formatDay(stats.firstDate)}</span>
-                {" → "}
-                <span className="font-medium text-foreground">{formatDay(stats.lastDate)}</span>
-                {` · ${stats.activeDays} active days`}
-                {stats.sources.length > 0 ? ` · agents: ${stats.sources.join(", ")}` : ""}
-                {stats.deviceCount > 1 ? ` · ${stats.deviceCount} devices` : ""}
-              </>
-            ) : (
-              "Nothing synced yet."
-            )}
-          </p>
-        </div>
+        <h1 className="text-2xl font-semibold tracking-tight">{owner.login}</h1>
       </header>
 
       {daily.data.days.length === 0 ? (
@@ -106,42 +89,19 @@ interface DashboardStats {
 function ProfileDashboard({ rows, stats }: { rows: readonly DailyRow[]; stats: DashboardStats }) {
   const derived = useMemo(() => deriveCharts(rows), [rows]);
 
-  const calendarDays =
-    stats.firstDate !== null && stats.lastDate !== null
-      ? enumerateDays(stats.firstDate, stats.lastDate).length
-      : 0;
-
   return (
     <>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <StatCard
-          label="Total spend"
-          sub="API-equivalent cost"
-          value={formatUsd(stats.totalSpendUsd)}
-        />
-        <StatCard
-          label="Total tokens"
-          sub={`${formatTokens(derived.outputTokens)} generated`}
-          value={formatTokens(stats.totalTokens)}
-        />
-        <StatCard
-          label="Active days"
-          sub={`of ${calendarDays} calendar days`}
-          value={String(stats.activeDays)}
-        />
-        <StatCard
-          label="Avg / active day"
-          sub="cost per day used"
-          value={formatUsd(stats.avgSpendPerActiveDay)}
-        />
+        <StatCard label="Total spend" value={formatUsd(stats.totalSpendUsd)} />
+        <StatCard label="Total tokens" value={formatTokens(stats.totalTokens)} />
+        <StatCard label="Active days" value={String(stats.activeDays)} />
+        <StatCard label="Avg / active day" value={formatUsd(stats.avgSpendPerActiveDay)} />
         <StatCard
           label="Peak day"
-          sub={stats.peakDay === null ? "—" : formatDay(stats.peakDay.date)}
           value={stats.peakDay === null ? "—" : formatUsd(stats.peakDay.spendUsd)}
         />
         <StatCard
           label="Top model"
-          sub={stats.topModel === null ? "—" : `${formatUsd(stats.topModel.spendUsd)} total`}
           value={stats.topModel === null ? "—" : modelFamily(stats.topModel.model)}
         />
       </div>
