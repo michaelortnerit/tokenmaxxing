@@ -17,6 +17,8 @@ import { CliAuthLive } from "./http/middleware/cli-auth";
 import { makeApiHttpEffect } from "./http/layer";
 import { makeTokensService, TokensService } from "./tokens/service";
 import { TokensRepositoryLive } from "./tokens/d1";
+import { makeUsageService, UsageService } from "./usage/service";
+import { UsageRepositoryLive } from "./usage/d1";
 
 const ApiWorker = Cloudflare.Worker(
   "api",
@@ -59,6 +61,9 @@ const ApiWorker = Cloudflare.Worker(
       Effect.provide(FetchHttpClient.layer),
       Effect.provideService(AppConfig, config),
     );
+    const usage = yield* makeUsageService().pipe(
+      Effect.provide(UsageRepositoryLive.pipe(Layer.provide(drizzleLayer))),
+    );
 
     // Handlers and raw routes (OAuth) resolve these services at request
     // time, not layer-build time — this context rides along with every
@@ -69,6 +74,7 @@ const ApiWorker = Cloudflare.Worker(
       Context.add(CliLoginService, cliLogin),
       Context.add(GitHubClient, github),
       Context.add(TokensService, tokens),
+      Context.add(UsageService, usage),
     );
 
     return {
@@ -79,6 +85,7 @@ const ApiWorker = Cloudflare.Worker(
         drizzleLayer,
         middlewareLayer: Layer.mergeAll(AuthorizationLive, CliAuthLive),
         tokensServiceLayer: Layer.succeed(TokensService, tokens),
+        usageServiceLayer: Layer.succeed(UsageService, usage),
       }).pipe(Effect.map((apiHttpEffect) => apiHttpEffect.pipe(Effect.provide(rawRouteServices)))),
     };
   }).pipe(Effect.provide([Cloudflare.D1ConnectionLive, Cloudflare.D1ConnectionPolicyLive])),

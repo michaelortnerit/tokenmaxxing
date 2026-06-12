@@ -22,6 +22,7 @@ import type { AuthService } from "../auth/service";
 import { CliLoginService } from "../clilogin/service";
 import type { Drizzle } from "../database";
 import { TokensService } from "../tokens/service";
+import { UsageService } from "../usage/service";
 import { oauthRoutesLayer } from "./routes/oauth";
 
 /**
@@ -103,7 +104,13 @@ const cliLoginHandlers = HttpApiBuilder.group(TokenmaxxingApi, "cliLogin", (hand
 
 const usageHandlers = HttpApiBuilder.group(TokenmaxxingApi, "usage", (handlers) =>
   handlers
-    .handle("sync", () => Effect.die("not implemented"))
+    .handle("sync", ({ payload }) =>
+      Effect.gen(function* () {
+        const identity = yield* CurrentCliIdentity;
+        const usage = yield* UsageService;
+        return yield* usage.syncBatch(identity, payload.device, payload.days);
+      }),
+    )
     .handle("logout", () =>
       Effect.gen(function* () {
         const identity = yield* CurrentCliIdentity;
@@ -143,6 +150,7 @@ interface ApiLayerOptions {
   drizzleLayer: Layer.Layer<Drizzle>;
   middlewareLayer: Layer.Layer<Authorization | CliAuth, never, AuthService | TokensService>;
   tokensServiceLayer: Layer.Layer<TokensService>;
+  usageServiceLayer: Layer.Layer<UsageService>;
 }
 
 function makeApiLayer(options: ApiLayerOptions) {
@@ -158,6 +166,7 @@ function makeApiLayer(options: ApiLayerOptions) {
     Layer.provide(corsLayer),
     Layer.provide(options.cliLoginServiceLayer),
     Layer.provide(options.tokensServiceLayer),
+    Layer.provide(options.usageServiceLayer),
     Layer.provide(options.authServiceLayer),
     Layer.provide(options.drizzleLayer),
     Layer.provide(options.appConfigLayer),
