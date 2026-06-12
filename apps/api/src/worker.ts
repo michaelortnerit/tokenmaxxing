@@ -2,24 +2,23 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
-import { Authorization, CliAuth, Unauthorized } from "@tokenmaxxing/api-contract";
+import { CliAuth, Unauthorized } from "@tokenmaxxing/api-contract";
 
+import { AuthRepositoryLive } from "./auth/d1";
+import { AuthService, makeAuthService } from "./auth/service";
 import { Database } from "./cloudflare/database";
 import { AppConfig } from "./config";
 import { Drizzle } from "./database";
+import { GitHubClient, makeGitHubClient } from "./github/client";
+import { AuthorizationLive } from "./http/middleware/authorization";
 import { makeApiHttpEffect } from "./http/layer";
 
-/** Placeholder until the auth milestones land: every guarded endpoint 401s. */
-const middlewareStubLayer = Layer.mergeAll(
-  Layer.succeed(
-    Authorization,
-    Authorization.of(() => Effect.fail(new Unauthorized({ message: "Sign in required." }))),
-  ),
-  Layer.succeed(
-    CliAuth,
-    CliAuth.of(() => Effect.fail(new Unauthorized({ message: "CLI token required." }))),
-  ),
+/** Placeholder until the device-code milestone lands: CLI endpoints 401. */
+const cliAuthStubLayer = Layer.succeed(
+  CliAuth,
+  CliAuth.of(() => Effect.fail(new Unauthorized({ message: "CLI token required." }))),
 );
 
 const ApiWorker = Cloudflare.Worker(
@@ -50,15 +49,29 @@ const ApiWorker = Cloudflare.Worker(
     const appConfigLayer = Layer.succeed(AppConfig, config);
     const drizzleLayer = Drizzle.layer(connection);
 
-    // Handlers and raw routes resolve these services at request time, not
-    // layer-build time — this context rides along with every routed request.
-    const rawRouteServices = Context.empty().pipe(Context.add(AppConfig, config));
+    const auth = yield* makeAuthService().pipe(
+      Effect.provide(AuthRepositoryLive.pipe(Layer.provide(drizzleLayer))),
+    );
+    const github = yield* makeGitHubClient().pipe(
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provideService(AppConfig, config),
+    );
+
+    // Handlers and raw routes (OAuth) resolve these services at request
+    // time, not layer-build time — this context rides along with every
+    // routed request.
+    const rawRouteServices = Context.empty().pipe(
+      Context.add(AppConfig, config),
+      Context.add(AuthService, auth),
+      Context.add(GitHubClient, github),
+    );
 
     return {
       fetch: makeApiHttpEffect({
         appConfigLayer,
+        authServiceLayer: Layer.succeed(AuthService, auth),
         drizzleLayer,
-        middlewareLayer: middlewareStubLayer,
+        middlewareLayer: Layer.mergeAll(AuthorizationLive, cliAuthStubLayer),
       }).pipe(Effect.map((apiHttpEffect) => apiHttpEffect.pipe(Effect.provide(rawRouteServices)))),
     };
   }).pipe(Effect.provide([Cloudflare.D1ConnectionLive, Cloudflare.D1ConnectionPolicyLive])),

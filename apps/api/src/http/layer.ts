@@ -13,11 +13,13 @@ import * as HttpPlatform from "effect/unstable/http/HttpPlatform";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 import * as HttpApiError from "effect/unstable/httpapi/HttpApiError";
 
-import { TokenmaxxingApi } from "@tokenmaxxing/api-contract";
+import { CurrentUser, TokenmaxxingApi } from "@tokenmaxxing/api-contract";
 import type { Authorization, CliAuth } from "@tokenmaxxing/api-contract";
 
 import { AppConfig } from "../config";
+import type { AuthService } from "../auth/service";
 import type { Drizzle } from "../database";
+import { oauthRoutesLayer } from "./routes/oauth";
 
 /**
  * Handler layers, one per contract group — pure pass-throughs over the
@@ -40,7 +42,12 @@ const healthHandlers = HttpApiBuilder.group(TokenmaxxingApi, "health", (handlers
 
 const meHandlers = HttpApiBuilder.group(TokenmaxxingApi, "me", (handlers) =>
   handlers
-    .handle("me", () => Effect.die("not implemented"))
+    .handle("me", () =>
+      Effect.gen(function* () {
+        const user = yield* CurrentUser;
+        return { user };
+      }),
+    )
     .handle("approveCliLogin", () => Effect.die("not implemented"))
     .handle("listDevices", () => Effect.die("not implemented"))
     .handle("listTokens", () => Effect.die("not implemented"))
@@ -80,18 +87,23 @@ const handlersLayer = Layer.mergeAll(
 
 interface ApiLayerOptions {
   appConfigLayer: Layer.Layer<AppConfig>;
+  authServiceLayer: Layer.Layer<AuthService>;
   drizzleLayer: Layer.Layer<Drizzle>;
-  middlewareLayer: Layer.Layer<Authorization | CliAuth, never, never>;
+  middlewareLayer: Layer.Layer<Authorization | CliAuth, never, AuthService>;
 }
 
 function makeApiLayer(options: ApiLayerOptions) {
-  const apiLayer = HttpApiBuilder.layer(TokenmaxxingApi, { openapiPath: "/openapi.json" });
+  const apiLayer = Layer.mergeAll(
+    HttpApiBuilder.layer(TokenmaxxingApi, { openapiPath: "/openapi.json" }),
+    oauthRoutesLayer,
+  );
 
   return apiLayer.pipe(
     Layer.provide(handlersLayer),
     Layer.provide(options.middlewareLayer),
     Layer.provide(requestIdLayer),
     Layer.provide(corsLayer),
+    Layer.provide(options.authServiceLayer),
     Layer.provide(options.drizzleLayer),
     Layer.provide(options.appConfigLayer),
   );
