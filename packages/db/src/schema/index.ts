@@ -1,2 +1,141 @@
-// Schema lands in the next milestone; this keeps the package compiling.
-export {};
+import { index, integer, primaryKey, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+
+const users = sqliteTable("users", {
+  id: text("id").primaryKey(),
+  githubId: integer("github_id").notNull().unique("users_github_id_unique"),
+  login: text("login").notNull().unique("users_login_unique"),
+  name: text("name"),
+  avatarUrl: text("avatar_url"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+});
+
+/** id = sha256(token); the raw token lives only in the browser cookie. */
+const sessions = sqliteTable(
+  "sessions",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [index("sessions_user_idx").on(table.userId)],
+);
+
+/**
+ * Device-code login flow. The raw CLI token is parked on the row between
+ * approve and poll; the row is deleted when poll delivers it (exactly once)
+ * and rows expire 10 minutes after start regardless.
+ */
+const cliLoginRequests = sqliteTable("cli_login_requests", {
+  id: text("id").primaryKey(),
+  code: text("code").notNull().unique("cli_login_requests_code_unique"),
+  status: text("status", { enum: ["pending", "approved"] })
+    .notNull()
+    .default("pending"),
+  userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
+  token: text("token"),
+  deviceId: text("device_id").notNull(),
+  deviceName: text("device_name").notNull(),
+  devicePlatform: text("device_platform").notNull(),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+});
+
+/** Never expires by design; revokedAt is the only kill switch. */
+const cliTokens = sqliteTable(
+  "cli_tokens",
+  {
+    id: text("id").primaryKey(),
+    tokenHash: text("token_hash").notNull().unique("cli_tokens_token_hash_unique"),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    deviceId: text("device_id"),
+    name: text("name"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    lastUsedAt: integer("last_used_at", { mode: "timestamp_ms" }),
+    revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
+  },
+  (table) => [index("cli_tokens_user_idx").on(table.userId)],
+);
+
+/**
+ * id is a client-generated UUID persisted in the CLI config — it survives
+ * logout/login so re-syncs stay idempotent across re-authentication.
+ */
+const devices = sqliteTable(
+  "devices",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    platform: text("platform").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    lastSyncAt: integer("last_sync_at", { mode: "timestamp_ms" }),
+  },
+  (table) => [index("devices_user_idx").on(table.userId)],
+);
+
+/**
+ * One row per (device, local day, agent, model); the sync endpoint upserts
+ * on that key (last write wins). `date` is an opaque YYYY-MM-DD string in
+ * the device's local time — zero-padded ISO compares lexicographically,
+ * which is what the leaderboard window scans rely on.
+ */
+const usageDays = sqliteTable(
+  "usage_days",
+  {
+    deviceId: text("device_id").notNull(),
+    userId: text("user_id").notNull(),
+    date: text("date").notNull(),
+    source: text("source").notNull(),
+    model: text("model").notNull(),
+    inputTokens: integer("input_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    cacheCreationTokens: integer("cache_creation_tokens").notNull().default(0),
+    cacheReadTokens: integer("cache_read_tokens").notNull().default(0),
+    totalTokens: integer("total_tokens").notNull().default(0),
+    costUsd: real("cost_usd").notNull().default(0),
+    syncedAt: integer("synced_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.deviceId, table.date, table.source, table.model] }),
+    index("usage_days_user_date_idx").on(table.userId, table.date),
+    index("usage_days_date_idx").on(table.date),
+  ],
+);
+
+type User = typeof users.$inferSelect;
+type NewUser = typeof users.$inferInsert;
+type Session = typeof sessions.$inferSelect;
+type NewSession = typeof sessions.$inferInsert;
+type CliLoginRequest = typeof cliLoginRequests.$inferSelect;
+type NewCliLoginRequest = typeof cliLoginRequests.$inferInsert;
+type CliToken = typeof cliTokens.$inferSelect;
+type NewCliToken = typeof cliTokens.$inferInsert;
+type Device = typeof devices.$inferSelect;
+type NewDevice = typeof devices.$inferInsert;
+type UsageDay = typeof usageDays.$inferSelect;
+type NewUsageDay = typeof usageDays.$inferInsert;
+
+export { cliLoginRequests, cliTokens, devices, sessions, usageDays, users };
+
+export type {
+  CliLoginRequest,
+  CliToken,
+  Device,
+  NewCliLoginRequest,
+  NewCliToken,
+  NewDevice,
+  NewSession,
+  NewUsageDay,
+  NewUser,
+  Session,
+  UsageDay,
+  User,
+};

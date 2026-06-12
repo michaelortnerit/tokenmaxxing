@@ -1,0 +1,224 @@
+import * as Schema from "effect/Schema";
+
+const HealthResponse = Schema.Struct({
+  ok: Schema.Boolean,
+  product: Schema.String,
+  service: Schema.String,
+});
+
+const AuthUser = Schema.Struct({
+  avatarUrl: Schema.NullOr(Schema.String),
+  id: Schema.String,
+  login: Schema.String,
+  name: Schema.NullOr(Schema.String),
+});
+
+type AuthUser = typeof AuthUser.Type;
+
+const MeResponse = Schema.Struct({
+  user: AuthUser,
+});
+
+/** Identity resolved from a `tmx_` bearer token (CLI clients). */
+const CliIdentity = Schema.Struct({
+  deviceId: Schema.NullOr(Schema.String),
+  tokenId: Schema.String,
+  user: AuthUser,
+});
+
+type CliIdentity = typeof CliIdentity.Type;
+
+const DeviceSummary = Schema.Struct({
+  createdAt: Schema.String,
+  id: Schema.String,
+  lastSyncAt: Schema.NullOr(Schema.String),
+  name: Schema.String,
+  platform: Schema.String,
+});
+
+const CliTokenSummary = Schema.Struct({
+  createdAt: Schema.String,
+  deviceId: Schema.NullOr(Schema.String),
+  id: Schema.String,
+  lastUsedAt: Schema.NullOr(Schema.String),
+  name: Schema.NullOr(Schema.String),
+  revokedAt: Schema.NullOr(Schema.String),
+});
+
+const CliLoginStartInput = Schema.Struct({
+  deviceId: Schema.String,
+  deviceName: Schema.String,
+  devicePlatform: Schema.String,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+
+const CliLoginStartResponse = Schema.Struct({
+  code: Schema.String,
+  expiresAt: Schema.String,
+  intervalSeconds: Schema.Number,
+  verificationUri: Schema.String,
+});
+
+const CliLoginPollInput = Schema.Struct({
+  code: Schema.String,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+
+const CliLoginPollResponse = Schema.Union([
+  Schema.Struct({ status: Schema.Literal("pending") }),
+  Schema.Struct({
+    status: Schema.Literal("complete"),
+    token: Schema.String,
+    user: AuthUser,
+  }),
+]);
+
+const CliLoginApproveInput = Schema.Struct({
+  code: Schema.String,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+
+const CliLoginApproveResponse = Schema.Struct({
+  deviceName: Schema.String,
+  ok: Schema.Boolean,
+});
+
+/**
+ * One day of usage for one (source, model) pair, as aggregated by the CLI
+ * from ccusage output. `date` is an opaque YYYY-MM-DD local-time bucket.
+ */
+const UsageDayInput = Schema.Struct({
+  cacheCreationTokens: Schema.Number,
+  cacheReadTokens: Schema.Number,
+  costUsd: Schema.Number,
+  date: Schema.String,
+  inputTokens: Schema.Number,
+  model: Schema.String,
+  outputTokens: Schema.Number,
+  source: Schema.String,
+  totalTokens: Schema.Number,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+
+type UsageDayInput = typeof UsageDayInput.Type;
+
+const SyncUsageInput = Schema.Struct({
+  days: Schema.Array(UsageDayInput),
+  device: Schema.Struct({
+    name: Schema.String,
+    platform: Schema.String,
+  }),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+
+const SyncUsageResponse = Schema.Struct({
+  received: Schema.Number,
+  syncedAt: Schema.String,
+  upserted: Schema.Number,
+});
+
+const LeaderboardMetric = Schema.Literals(["spend", "tokens"]);
+const LeaderboardWindow = Schema.Literals(["all", "30d", "7d"]);
+
+type LeaderboardMetric = typeof LeaderboardMetric.Type;
+type LeaderboardWindow = typeof LeaderboardWindow.Type;
+
+const LeaderboardEntry = Schema.Struct({
+  activeDays: Schema.Number,
+  lastDate: Schema.NullOr(Schema.String),
+  rank: Schema.Number,
+  spendUsd: Schema.Number,
+  totalTokens: Schema.Number,
+  user: AuthUser,
+});
+
+const LeaderboardResponse = Schema.Struct({
+  entries: Schema.Array(LeaderboardEntry),
+  metric: LeaderboardMetric,
+  window: LeaderboardWindow,
+});
+
+const ProfileStats = Schema.Struct({
+  activeDays: Schema.Number,
+  avgSpendPerActiveDay: Schema.Number,
+  deviceCount: Schema.Number,
+  firstDate: Schema.NullOr(Schema.String),
+  lastDate: Schema.NullOr(Schema.String),
+  peakDay: Schema.NullOr(
+    Schema.Struct({
+      date: Schema.String,
+      spendUsd: Schema.Number,
+    }),
+  ),
+  sources: Schema.Array(Schema.String),
+  topModel: Schema.NullOr(
+    Schema.Struct({
+      model: Schema.String,
+      spendUsd: Schema.Number,
+    }),
+  ),
+  totalSpendUsd: Schema.Number,
+  totalTokens: Schema.Number,
+});
+
+const ProfileResponse = Schema.Struct({
+  stats: ProfileStats,
+  user: AuthUser,
+});
+
+const ProfileDailyGroupBy = Schema.Literals(["model", "source", "device"]);
+
+type ProfileDailyGroupBy = typeof ProfileDailyGroupBy.Type;
+
+/** One row per (date, key); `key` is the model/source/device the row groups by. */
+const ProfileDailyRow = Schema.Struct({
+  cacheCreationTokens: Schema.Number,
+  cacheReadTokens: Schema.Number,
+  costUsd: Schema.Number,
+  date: Schema.String,
+  inputTokens: Schema.Number,
+  key: Schema.String,
+  outputTokens: Schema.Number,
+  totalTokens: Schema.Number,
+});
+
+const ProfileDailyResponse = Schema.Struct({
+  days: Schema.Array(ProfileDailyRow),
+});
+
+const OkResponse = Schema.Struct({
+  ok: Schema.Boolean,
+});
+
+export {
+  AuthUser,
+  CliIdentity,
+  CliLoginApproveInput,
+  CliLoginApproveResponse,
+  CliLoginPollInput,
+  CliLoginPollResponse,
+  CliLoginStartInput,
+  CliLoginStartResponse,
+  CliTokenSummary,
+  DeviceSummary,
+  HealthResponse,
+  LeaderboardEntry,
+  LeaderboardMetric,
+  LeaderboardResponse,
+  LeaderboardWindow,
+  MeResponse,
+  OkResponse,
+  ProfileDailyGroupBy,
+  ProfileDailyResponse,
+  ProfileDailyRow,
+  ProfileResponse,
+  ProfileStats,
+  SyncUsageInput,
+  SyncUsageResponse,
+  UsageDayInput,
+};
