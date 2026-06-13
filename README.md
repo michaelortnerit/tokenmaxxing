@@ -11,9 +11,12 @@ Cloudflare (Workers + D1) with [Alchemy](https://alchemy.run) v2.
 ## Quick start
 
 ```bash
-bunx @851-labs/tokenmaxxing login   # sign in with GitHub, approves this device
-bunx @851-labs/tokenmaxxing sync    # parse local usage via ccusage and push it
+bunx @851-labs/tokenmaxxing@latest login   # sign in with GitHub, approves this device
+bunx @851-labs/tokenmaxxing@latest sync    # parse local usage via ccusage and push it
 ```
+
+Always use `@latest` — bunx caches packages aggressively, and a stale CLI
+can price usage with outdated rules.
 
 `sync` aggregates one row per (day × model × agent) and upserts — run it as
 often as you like, from as many machines as you like; profiles aggregate

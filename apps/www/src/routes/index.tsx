@@ -42,7 +42,7 @@ function LeaderboardPage() {
           <p className="mt-1 text-sm text-muted-foreground">
             Who is maxxing the most tokens. Join with{" "}
             <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
-              bunx @851-labs/tokenmaxxing login
+              bunx @851-labs/tokenmaxxing@latest login
             </code>
           </p>
         </div>
