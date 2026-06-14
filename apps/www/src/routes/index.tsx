@@ -6,7 +6,7 @@ import { formatTokens, formatUsd } from "../components/charts/scale";
 import { Avatar } from "../components/ui/avatar";
 import { Code } from "../components/ui/code";
 import { Tabs } from "../components/ui/tabs";
-import { leaderboardQuery } from "../lib/queries";
+import { leaderboardQueryOptions } from "../lib/queries";
 
 interface LeaderboardSearch {
   metric: typeof LeaderboardMetric.Type;
@@ -35,7 +35,7 @@ const METRICS: { label: string; value: typeof LeaderboardMetric.Type }[] = [
 function LeaderboardPage() {
   const { metric, window } = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
-  const leaderboard = useQuery(leaderboardQuery(metric, window));
+  const leaderboard = useQuery(leaderboardQueryOptions(metric, window));
 
   return (
     <div>

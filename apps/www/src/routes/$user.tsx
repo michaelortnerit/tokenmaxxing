@@ -20,7 +20,7 @@ import { StatCard } from "../components/stat-card";
 import { Avatar } from "../components/ui/avatar";
 import { Card } from "../components/ui/card";
 import { Code } from "../components/ui/code";
-import { profileDailyQuery, profileQuery } from "../lib/queries";
+import { profileDailyQueryOptions, profileQueryOptions } from "../lib/queries";
 
 const Route = createFileRoute("/$user")({
   component: ProfilePage,
@@ -31,8 +31,8 @@ const DAILY_WINDOW = 184;
 
 function ProfilePage() {
   const { user } = Route.useParams();
-  const profile = useQuery(profileQuery(user));
-  const daily = useQuery(profileDailyQuery(user));
+  const profile = useQuery(profileQueryOptions(user));
+  const daily = useQuery(profileDailyQueryOptions(user));
 
   if (profile.isPending || daily.isPending) {
     return <p className="text-sm text-muted-foreground">Loading profile…</p>;

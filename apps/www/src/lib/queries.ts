@@ -8,24 +8,24 @@ import { runApi } from "./api";
  * useQuery/useMutation; query keys are the single source of cache identity.
  */
 
-const meQuery = queryOptions({
+const meQueryOptions = queryOptions({
   queryKey: ["me"],
   queryFn: () => runApi((client) => client.me.me()),
   retry: false,
   staleTime: 60_000,
 });
 
-const devicesQuery = queryOptions({
+const devicesQueryOptions = queryOptions({
   queryKey: ["me", "devices"],
   queryFn: () => runApi((client) => client.me.listDevices()),
 });
 
-const tokensQuery = queryOptions({
+const tokensQueryOptions = queryOptions({
   queryKey: ["me", "tokens"],
   queryFn: () => runApi((client) => client.me.listTokens()),
 });
 
-function leaderboardQuery(
+function leaderboardQueryOptions(
   metric: typeof LeaderboardMetric.Type,
   window: typeof LeaderboardWindow.Type,
 ) {
@@ -36,7 +36,7 @@ function leaderboardQuery(
   });
 }
 
-function profileQuery(login: string) {
+function profileQueryOptions(login: string) {
   return queryOptions({
     queryKey: ["profile", login],
     queryFn: () => runApi((client) => client.profiles.get({ params: { login } })),
@@ -44,7 +44,7 @@ function profileQuery(login: string) {
   });
 }
 
-function profileDailyQuery(login: string) {
+function profileDailyQueryOptions(login: string) {
   return queryOptions({
     queryKey: ["profile", login, "daily"],
     queryFn: () =>
@@ -53,4 +53,11 @@ function profileDailyQuery(login: string) {
   });
 }
 
-export { devicesQuery, leaderboardQuery, meQuery, profileDailyQuery, profileQuery, tokensQuery };
+export {
+  devicesQueryOptions,
+  leaderboardQueryOptions,
+  meQueryOptions,
+  profileDailyQueryOptions,
+  profileQueryOptions,
+  tokensQueryOptions,
+};

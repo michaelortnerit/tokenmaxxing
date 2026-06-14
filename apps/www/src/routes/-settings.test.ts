@@ -2,7 +2,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { isRedirect, type AnyRedirect } from "@tanstack/react-router";
 import { describe, expect, it, vi } from "vitest";
 
-import { meQuery } from "../lib/queries";
+import { meQueryOptions } from "../lib/queries";
 import {
   confirmDeviceDelete,
   deviceDeleteConfirmationMessage,
@@ -69,7 +69,7 @@ describe("guardSettingsRoute", () => {
 
     await guardSettingsRoute(queryClient, async () => me);
 
-    expect(queryClient.getQueryData(meQuery.queryKey)).toEqual(me);
+    expect(queryClient.getQueryData(meQueryOptions.queryKey)).toEqual(me);
   });
 });
 

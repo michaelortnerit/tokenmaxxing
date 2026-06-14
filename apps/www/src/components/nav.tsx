@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useRouter } from "@tanstack/react-router";
 
 import { signOut } from "../lib/api";
-import { meQuery } from "../lib/queries";
+import { meQueryOptions } from "../lib/queries";
 import { ThemeToggle } from "./theme-toggle";
 import { Avatar } from "./ui/avatar";
 import { Button, buttonClassName } from "./ui/button";
@@ -40,7 +40,7 @@ function Nav() {
 function UserMenu() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const me = useQuery(meQuery);
+  const me = useQuery(meQueryOptions);
   const signout = useMutation({
     mutationFn: signOut,
     onSuccess: async () => {

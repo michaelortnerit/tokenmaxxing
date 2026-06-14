@@ -10,7 +10,7 @@ import { Button } from "../components/ui/button";
 import { Code } from "../components/ui/code";
 import { errorMessage, runApi } from "../lib/api";
 import { resolveApiUrl } from "../lib/config";
-import { devicesQuery, meQuery, tokensQuery } from "../lib/queries";
+import { devicesQueryOptions, meQueryOptions, tokensQueryOptions } from "../lib/queries";
 
 const SETTINGS_PATH = "/settings";
 
@@ -40,7 +40,7 @@ async function guardSettingsRoute(
     });
   }
 
-  queryClient.setQueryData(meQuery.queryKey, me);
+  queryClient.setQueryData(meQueryOptions.queryKey, me);
 }
 
 async function fetchSettingsSession(
@@ -63,7 +63,7 @@ async function fetchSettingsSession(
 }
 
 function SettingsPage() {
-  const me = useQuery(meQuery);
+  const me = useQuery(meQueryOptions);
 
   if (me.isPending) {
     return <p className="text-sm text-muted-foreground">Loading…</p>;
@@ -93,7 +93,7 @@ function SettingsPage() {
 
 function DevicesSection({ login }: { login: string }) {
   const queryClient = useQueryClient();
-  const devices = useQuery(devicesQuery);
+  const devices = useQuery(devicesQueryOptions);
   const deleteDevice = useMutation({
     mutationFn: (device: Device) =>
       runApi((client) => client.me.deleteDevice({ params: { deviceId: device.id } })),
@@ -167,11 +167,11 @@ function DevicesSection({ login }: { login: string }) {
 
 function TokensSection() {
   const queryClient = useQueryClient();
-  const tokens = useQuery(tokensQuery);
+  const tokens = useQuery(tokensQueryOptions);
   const revoke = useMutation({
     mutationFn: (tokenId: string) =>
       runApi((client) => client.me.revokeToken({ params: { tokenId } })),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: tokensQuery.queryKey }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: tokensQueryOptions.queryKey }),
   });
 
   return (
@@ -239,7 +239,7 @@ function confirmDeviceDelete(
 }
 
 function deviceDeleteInvalidationKeys(login: string): DeviceDeleteInvalidationKey[] {
-  return [devicesQuery.queryKey, tokensQuery.queryKey, ["profile", login]];
+  return [devicesQueryOptions.queryKey, tokensQueryOptions.queryKey, ["profile", login]];
 }
 
 export {

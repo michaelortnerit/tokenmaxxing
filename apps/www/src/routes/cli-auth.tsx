@@ -6,7 +6,7 @@ import { Button, buttonClassName } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Code } from "../components/ui/code";
 import { errorMessage, runApi } from "../lib/api";
-import { meQuery } from "../lib/queries";
+import { meQueryOptions } from "../lib/queries";
 
 interface CliAuthSearch {
   code: string;
@@ -21,7 +21,7 @@ const Route = createFileRoute("/cli-auth")({
 
 function CliAuthPage() {
   const { code } = Route.useSearch();
-  const me = useQuery(meQuery);
+  const me = useQuery(meQueryOptions);
   const approve = useMutation({
     mutationFn: () => runApi((client) => client.me.approveCliLogin({ payload: { code } })),
   });
