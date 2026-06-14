@@ -3,6 +3,9 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import type { LeaderboardMetric, LeaderboardWindow } from "@tokenmaxxing/api-contract";
 
 import { formatTokens, formatUsd } from "../components/charts/scale";
+import { Avatar } from "../components/ui/avatar";
+import { Code } from "../components/ui/code";
+import { Tabs } from "../components/ui/tabs";
 import { leaderboardQuery } from "../lib/queries";
 
 interface LeaderboardSearch {
@@ -41,18 +44,16 @@ function LeaderboardPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Leaderboard</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Who is maxxing the most tokens. Join with{" "}
-            <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
-              bunx @851-labs/tokenmaxxing@latest login
-            </code>
+            <Code>bunx @851-labs/tokenmaxxing@latest login</Code>
           </p>
         </div>
         <div className="flex gap-2">
-          <Toggle
+          <Tabs
             onChange={(value) => navigate({ search: (prev) => ({ ...prev, metric: value }) })}
             options={METRICS}
             value={metric}
           />
-          <Toggle
+          <Tabs
             onChange={(value) => navigate({ search: (prev) => ({ ...prev, window: value }) })}
             options={WINDOWS}
             value={window}
@@ -96,16 +97,7 @@ function LeaderboardPage() {
                       params={{ user: entry.user.login }}
                       to="/$user"
                     >
-                      {entry.user.avatarUrl === null ? (
-                        <span className="size-6 rounded-full bg-muted" />
-                      ) : (
-                        <img
-                          alt=""
-                          className="size-6 rounded-full"
-                          loading="lazy"
-                          src={entry.user.avatarUrl}
-                        />
-                      )}
+                      <Avatar size={24} src={entry.user.avatarUrl} />
                       {entry.user.login}
                     </Link>
                   </td>
@@ -127,35 +119,6 @@ function LeaderboardPage() {
           </table>
         )}
       </div>
-    </div>
-  );
-}
-
-function Toggle<Value extends string>({
-  onChange,
-  options,
-  value,
-}: {
-  onChange: (value: Value) => void;
-  options: { label: string; value: Value }[];
-  value: Value;
-}) {
-  return (
-    <div className="flex rounded-lg border border-border p-0.5">
-      {options.map((option) => (
-        <button
-          className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-            option.value === value
-              ? "bg-foreground text-background"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-          key={option.value}
-          onClick={() => onChange(option.value)}
-          type="button"
-        >
-          {option.label}
-        </button>
-      ))}
     </div>
   );
 }

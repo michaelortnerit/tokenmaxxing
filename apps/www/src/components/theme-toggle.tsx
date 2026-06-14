@@ -1,5 +1,7 @@
 import { Moon, Sun } from "lucide-react";
 
+import { Button } from "./ui/button";
+
 /**
  * Flips the `dark` class and persists the choice; the root bootstrap script
  * replays it before paint on the next load.
@@ -13,15 +15,16 @@ function ThemeToggle() {
   };
 
   return (
-    <button
+    <Button
       aria-label="Toggle theme"
-      className="rounded-md border border-border p-1.5 text-muted-foreground transition-colors hover:text-foreground"
+      className="border border-border"
       onClick={toggle}
-      type="button"
+      size="icon"
+      variant="ghost"
     >
       <Sun className="block size-4 dark:hidden" />
       <Moon className="hidden size-4 dark:block" />
-    </button>
+    </Button>
   );
 }
 

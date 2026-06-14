@@ -17,6 +17,9 @@ import {
 } from "../components/charts/scale";
 import { Legend, StackedBars, type StackedDay } from "../components/charts/stacked-bars";
 import { StatCard } from "../components/stat-card";
+import { Avatar } from "../components/ui/avatar";
+import { Card } from "../components/ui/card";
+import { Code } from "../components/ui/code";
 import { profileDailyQuery, profileQuery } from "../lib/queries";
 
 const Route = createFileRoute("/$user")({
@@ -52,22 +55,14 @@ function ProfilePage() {
   return (
     <div className="flex flex-col gap-6">
       <header className="flex items-center gap-4">
-        {owner.avatarUrl === null ? (
-          <div className="size-14 rounded-full bg-muted" />
-        ) : (
-          <img alt="" className="size-14 rounded-full" src={owner.avatarUrl} />
-        )}
+        <Avatar size={56} src={owner.avatarUrl} />
         <h1 className="text-2xl font-semibold tracking-tight">{owner.login}</h1>
       </header>
 
       {daily.data.days.length === 0 ? (
-        <p className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">
-          No usage yet — run{" "}
-          <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
-            tokenmaxxing sync
-          </code>{" "}
-          to fill this page.
-        </p>
+        <Card className="p-6 text-sm text-muted-foreground">
+          No usage yet — run <Code>tokenmaxxing sync</Code> to fill this page.
+        </Card>
       ) : (
         <ProfileDashboard rows={daily.data.days} stats={stats} />
       )}

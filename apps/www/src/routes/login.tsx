@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { buttonClassName } from "../components/ui/button";
+import { Card } from "../components/ui/card";
 import { resolveApiUrl } from "../lib/config";
 
 function GitHubMark({ className }: { className?: string }) {
@@ -31,19 +33,19 @@ function LoginPage() {
   }
 
   return (
-    <div className="mx-auto mt-24 flex max-w-sm flex-col items-center rounded-xl border border-border bg-card p-8 text-center">
+    <Card className="mx-auto mt-24 flex max-w-sm flex-col items-center p-8 text-center">
       <h1 className="text-xl font-semibold tracking-tight">Sign in to tokenmaxxing</h1>
       <p className="mt-2 text-sm text-muted-foreground">
         Your GitHub identity is your profile — nothing else is requested.
       </p>
       <a
-        className="mt-6 flex w-full items-center justify-center gap-2 rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-85"
+        className={buttonClassName({ variant: "primary", size: "md", fullWidth: true }) + " mt-6"}
         href={authUrl.toString()}
       >
         <GitHubMark className="size-4" />
         Continue with GitHub
       </a>
-    </div>
+    </Card>
   );
 }
 

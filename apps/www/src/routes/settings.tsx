@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Laptop, KeyRound } from "lucide-react";
 
+import { Button } from "../components/ui/button";
+import { Code } from "../components/ui/code";
 import { errorMessage, runApi } from "../lib/api";
 import { devicesQuery, meQuery, tokensQuery } from "../lib/queries";
 
@@ -61,8 +63,7 @@ function DevicesSection() {
           <p className="p-4 text-sm text-muted-foreground">Loading…</p>
         ) : devices.isError || devices.data.devices.length === 0 ? (
           <p className="p-4 text-sm text-muted-foreground">
-            No devices yet — run <code className="font-mono text-xs">tokenmaxxing login</code> on a
-            machine to add it.
+            No devices yet — run <Code>tokenmaxxing login</Code> on a machine to add it.
           </p>
         ) : (
           <table className="w-full text-sm">
@@ -129,14 +130,13 @@ function TokensSection() {
                     {token.revokedAt !== null ? (
                       <span className="text-muted-foreground">revoked</span>
                     ) : (
-                      <button
-                        className="text-red-500 hover:underline disabled:opacity-50"
+                      <Button
                         disabled={revoke.isPending}
                         onClick={() => revoke.mutate(token.id)}
-                        type="button"
+                        variant="destructive"
                       >
                         Revoke
-                      </button>
+                      </Button>
                     )}
                   </td>
                 </tr>

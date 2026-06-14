@@ -2,6 +2,9 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { CheckCircle2, TerminalSquare } from "lucide-react";
 
+import { Button, buttonClassName } from "../components/ui/button";
+import { Card } from "../components/ui/card";
+import { Code } from "../components/ui/code";
 import { errorMessage, runApi } from "../lib/api";
 import { meQuery } from "../lib/queries";
 
@@ -24,7 +27,7 @@ function CliAuthPage() {
   });
 
   return (
-    <div className="mx-auto mt-24 flex max-w-sm flex-col items-center rounded-xl border border-border bg-card p-8 text-center">
+    <Card className="mx-auto mt-24 flex max-w-sm flex-col items-center p-8 text-center">
       <TerminalSquare className="size-8 text-muted-foreground" />
       <h1 className="mt-4 text-xl font-semibold tracking-tight">Connect your CLI</h1>
 
@@ -41,7 +44,9 @@ function CliAuthPage() {
             the code in the URL.
           </p>
           <Link
-            className="mt-6 w-full rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-85"
+            className={
+              buttonClassName({ variant: "primary", size: "md", fullWidth: true }) + " mt-6"
+            }
             search={{ redirect: cliAuthRedirectPath(code) }}
             to="/login"
           >
@@ -70,22 +75,20 @@ function CliAuthPage() {
               {errorMessage(approve.error, "Approval failed; run `tokenmaxxing login` again.")}
             </p>
           ) : null}
-          <button
-            className="mt-6 w-full rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-85 disabled:opacity-50"
+          <Button
+            className="mt-6"
             disabled={approve.isPending}
+            fullWidth
             onClick={() => approve.mutate()}
-            type="button"
+            size="md"
+            variant="primary"
           >
             {approve.isPending ? "Approving…" : "Approve device"}
-          </button>
+          </Button>
         </>
       )}
-    </div>
+    </Card>
   );
-}
-
-function Code({ children }: { children: React.ReactNode }) {
-  return <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{children}</code>;
 }
 
 function cliAuthRedirectPath(code: string): string {

@@ -4,6 +4,8 @@ import { Link, useRouter } from "@tanstack/react-router";
 import { signOut } from "../lib/api";
 import { meQuery } from "../lib/queries";
 import { ThemeToggle } from "./theme-toggle";
+import { Avatar } from "./ui/avatar";
+import { Button, buttonClassName } from "./ui/button";
 
 function Nav() {
   return (
@@ -48,15 +50,12 @@ function UserMenu() {
   });
 
   if (me.isPending) {
-    return <div className="size-7 rounded-full bg-muted" />;
+    return <Avatar size={28} src={null} />;
   }
 
   if (me.isError) {
     return (
-      <Link
-        className="rounded-md bg-foreground px-3 py-1.5 text-sm font-medium text-background transition-opacity hover:opacity-85"
-        to="/login"
-      >
+      <Link className={buttonClassName({ variant: "primary", size: "sm" })} to="/login">
         Sign in
       </Link>
     );
@@ -67,22 +66,14 @@ function UserMenu() {
   return (
     <div className="flex items-center gap-3">
       <Link className="flex items-center gap-2" params={{ user: user.login }} to="/$user">
-        {user.avatarUrl === null ? (
-          <div className="size-7 rounded-full bg-muted" />
-        ) : (
-          <img alt={user.login} className="size-7 rounded-full" src={user.avatarUrl} />
-        )}
+        <Avatar alt={user.login} size={28} src={user.avatarUrl} />
       </Link>
       <Link className="text-sm text-muted-foreground hover:text-foreground" to="/settings">
         Settings
       </Link>
-      <button
-        className="text-sm text-muted-foreground hover:text-foreground"
-        onClick={() => signout.mutate()}
-        type="button"
-      >
+      <Button onClick={() => signout.mutate()} variant="ghost">
         Sign out
-      </button>
+      </Button>
     </div>
   );
 }

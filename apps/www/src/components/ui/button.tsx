@@ -1,0 +1,55 @@
+import type { ButtonHTMLAttributes } from "react";
+
+import { cn } from "../../lib/cn";
+
+type ButtonVariant = "primary" | "ghost" | "destructive";
+type ButtonSize = "sm" | "md" | "icon";
+
+interface ButtonStyleProps {
+  variant?: ButtonVariant;
+  /** Adds padding. Omit for a bare text-link button. */
+  size?: ButtonSize;
+  fullWidth?: boolean;
+}
+
+const VARIANTS: Record<ButtonVariant, string> = {
+  primary:
+    "rounded-md font-medium bg-foreground text-background transition-opacity hover:opacity-85 disabled:opacity-50",
+  ghost: "text-muted-foreground transition-colors hover:text-foreground",
+  destructive: "text-red-500 transition-colors hover:underline disabled:opacity-50",
+};
+
+const SIZES: Record<ButtonSize, string> = {
+  sm: "px-3 py-1.5",
+  md: "px-4 py-2",
+  icon: "rounded-md p-1.5",
+};
+
+/**
+ * Returns the className for a button-styled element. Use this directly on
+ * `<Link>`/`<a>` so they can borrow the styling; use `<Button>` for native
+ * buttons.
+ */
+function buttonClassName({ variant = "primary", size, fullWidth }: ButtonStyleProps = {}): string {
+  return cn(
+    "inline-flex items-center justify-center gap-2 text-sm",
+    VARIANTS[variant],
+    size && SIZES[size],
+    fullWidth && "w-full",
+  );
+}
+
+interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>, ButtonStyleProps {}
+
+function Button({ variant, size, fullWidth, className, type = "button", ...rest }: ButtonProps) {
+  return (
+    <button
+      className={cn(buttonClassName({ variant, size, fullWidth }), className)}
+      type={type}
+      {...rest}
+    />
+  );
+}
+
+export { Button, buttonClassName };
+export type { ButtonVariant, ButtonSize };
