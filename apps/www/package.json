@@ -14,12 +14,12 @@
     "@base-ui-components/react": "catalog:",
     "@fontsource/geist-mono": "catalog:",
     "@fontsource/geist-sans": "catalog:",
+    "@phosphor-icons/react": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-router": "catalog:",
     "@tanstack/react-start": "catalog:",
     "@tokenmaxxing/api-contract": "workspace:*",
     "effect": "catalog:",
-    "lucide-react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:"
   },

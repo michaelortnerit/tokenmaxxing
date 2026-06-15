@@ -4,7 +4,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeader } from "@tanstack/react-start/server";
 import { DeviceSummary, MeResponse, UserAccountSummary } from "@tokenmaxxing/api-contract";
 import * as Schema from "effect/Schema";
-import { KeyRound, Laptop, Link2 } from "lucide-react";
+import { Key, Laptop, Link } from "@phosphor-icons/react/ssr";
 
 import {
   oauthProviderLabel,
@@ -114,7 +114,7 @@ function ConnectedAccountsSection() {
   return (
     <section>
       <h2 className="flex items-center gap-2 text-lg font-medium">
-        <Link2 className="size-4" /> Connected accounts
+        <Link className="size-4" /> Connected accounts
       </h2>
       <p className="mt-1 text-sm text-muted-foreground">
         Sign in with any connected provider to reach the same profile.
@@ -247,7 +247,7 @@ function TokensSection() {
   return (
     <section>
       <h2 className="flex items-center gap-2 text-lg font-medium">
-        <KeyRound className="size-4" /> CLI tokens
+        <Key className="size-4" /> CLI tokens
       </h2>
       <p className="mt-1 text-sm text-muted-foreground">
         Tokens never expire — revoking here (or `tokenmaxxing logout` on the device) is the only

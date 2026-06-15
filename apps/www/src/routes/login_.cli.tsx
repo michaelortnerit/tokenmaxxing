@@ -2,7 +2,7 @@ import { useEffect } from "react";
 
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { CheckCircle2, TerminalSquare } from "lucide-react";
+import { CheckCircle, TerminalWindow } from "@phosphor-icons/react/ssr";
 
 import { OAuthProviderButtons } from "../components/oauth-providers";
 import { Button } from "../components/ui/button";
@@ -39,7 +39,7 @@ function CliLoginPage() {
 
   return (
     <Card className="mx-auto mt-24 flex max-w-sm flex-col items-center p-8 text-center">
-      <TerminalSquare className="size-8 text-muted-foreground" />
+      <TerminalWindow className="size-8 text-muted-foreground" />
       <h1 className="mt-4 text-xl font-semibold tracking-tight">Connect your CLI</h1>
 
       {code === "" ? (
@@ -58,7 +58,7 @@ function CliLoginPage() {
       ) : approve.isSuccess ? (
         <>
           <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
-            <CheckCircle2 className="size-4 text-accent" />
+            <CheckCircle className="size-4 text-accent" />
             Approved <span className="font-medium">{approve.data.deviceName}</span>.
           </p>
           <p className="mt-2 text-sm text-muted-foreground">
