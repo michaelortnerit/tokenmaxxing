@@ -1,4 +1,14 @@
-import { sessions, userAccounts, users, type User, type UserAccount } from "@tokenmaxxing/db";
+import {
+  cliLoginRequests,
+  cliTokens,
+  devices,
+  sessions,
+  usageDays,
+  userAccounts,
+  users,
+  type User,
+  type UserAccount,
+} from "@tokenmaxxing/db";
 import { and, eq, gt } from "drizzle-orm";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -105,7 +115,8 @@ const makeD1AuthRepository = Effect.fn("makeD1AuthRepository")(function* () {
             .select({ user: users })
             .from(userAccounts)
             .innerJoin(users, eq(userAccounts.userId, users.id))
-            .where(and(eq(userAccounts.email, email), eq(userAccounts.emailVerified, true))),
+            .where(and(eq(userAccounts.email, email), eq(userAccounts.emailVerified, true)))
+            .orderBy(users.createdAt, users.login),
         );
 
         return rows.map((row) => toCurrentUser(row.user));
@@ -165,6 +176,60 @@ const makeD1AuthRepository = Effect.fn("makeD1AuthRepository")(function* () {
 
         return rows.map(toUserAccountSummary);
       }),
+    mergeUsers: ({ sourceUserId, targetUserId }) =>
+      Effect.gen(function* () {
+        if (sourceUserId === targetUserId) {
+          const target = yield* findUserOrDie(targetUserId);
+          return toCurrentUser(target);
+        }
+
+        const [source, target] = yield* Effect.all([
+          findUserOrDie(sourceUserId),
+          findUserOrDie(targetUserId),
+        ]);
+        const now = new Date();
+
+        yield* database.use((db) =>
+          db.batch([
+            db
+              .update(userAccounts)
+              .set({ userId: targetUserId })
+              .where(eq(userAccounts.userId, sourceUserId)),
+            db
+              .update(sessions)
+              .set({ userId: targetUserId })
+              .where(eq(sessions.userId, sourceUserId)),
+            db
+              .update(cliLoginRequests)
+              .set({ userId: targetUserId })
+              .where(eq(cliLoginRequests.userId, sourceUserId)),
+            db
+              .update(cliTokens)
+              .set({ userId: targetUserId })
+              .where(eq(cliTokens.userId, sourceUserId)),
+            db
+              .update(devices)
+              .set({ userId: targetUserId })
+              .where(eq(devices.userId, sourceUserId)),
+            db
+              .update(usageDays)
+              .set({ userId: targetUserId })
+              .where(eq(usageDays.userId, sourceUserId)),
+            db
+              .update(users)
+              .set({
+                avatarUrl: target.avatarUrl ?? source.avatarUrl,
+                name: target.name ?? source.name,
+                updatedAt: now,
+              })
+              .where(eq(users.id, targetUserId)),
+            db.delete(users).where(eq(users.id, sourceUserId)),
+          ]),
+        );
+
+        const merged = yield* findUserOrDie(targetUserId);
+        return toCurrentUser(merged);
+      }),
     findSessionUser: (sessionId, now) =>
       Effect.gen(function* () {
         const rows = yield* database.use((db) =>
@@ -184,6 +249,20 @@ const makeD1AuthRepository = Effect.fn("makeD1AuthRepository")(function* () {
         yield* database.use((db) => db.delete(sessions).where(eq(sessions.id, sessionId)));
       }),
   });
+
+  function findUserOrDie(userId: string) {
+    return Effect.gen(function* () {
+      const rows = yield* database.use((db) =>
+        db.select().from(users).where(eq(users.id, userId)).limit(1),
+      );
+      const user = rows[0];
+      if (user === undefined) {
+        return yield* Effect.die(`missing user ${userId}`);
+      }
+
+      return user;
+    });
+  }
 });
 
 const AuthRepositoryLive = Layer.effect(AuthRepository, makeD1AuthRepository());

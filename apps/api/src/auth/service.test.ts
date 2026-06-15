@@ -51,7 +51,7 @@ describe("AuthService provider linking", () => {
     expect(store.accounts.get(accountKey("google", "google_123"))?.userId).toBe(user.id);
   });
 
-  it("does not auto-link a verified email when multiple users match", async () => {
+  it("merges verified-email duplicates into the oldest matching user", async () => {
     const { service, store } = await makeTestAuth();
     const first = currentUser({ id: "first", login: "first" });
     const second = currentUser({ id: "second", login: "second" });
@@ -67,12 +67,39 @@ describe("AuthService provider linking", () => {
     });
 
     const result = await runAuth(
+      service.signInWithProvider(
+        googleProfile({ email: "shared@example.com", providerAccountId: "google" }),
+      ),
+    );
+
+    expect(result.user.id).toBe(first.id);
+    expect(store.users.has(second.id)).toBe(false);
+    expect(store.accounts.get(accountKey("github", "second"))?.userId).toBe(first.id);
+    expect(store.accounts.get(accountKey("google", "google"))?.userId).toBe(first.id);
+  });
+
+  it("signs an existing provider duplicate into the oldest verified-email profile", async () => {
+    const { service, store } = await makeTestAuth();
+    const first = currentUser({ id: "first", login: "first" });
+    const second = currentUser({ id: "second", login: "second" });
+    store.users.set(first.id, first);
+    store.users.set(second.id, second);
+    store.accounts.set(accountKey("github", "github"), {
+      profile: githubProfile({ email: "shared@example.com", providerAccountId: "github" }),
+      userId: first.id,
+    });
+    store.accounts.set(accountKey("google", "google_123"), {
+      profile: googleProfile({ email: "shared@example.com" }),
+      userId: second.id,
+    });
+
+    const result = await runAuth(
       service.signInWithProvider(googleProfile({ email: "shared@example.com" })),
     );
 
-    expect(result.user.id).not.toBe(first.id);
-    expect(result.user.id).not.toBe(second.id);
-    expect(result.user.login).toBe("shared");
+    expect(result.user.id).toBe(first.id);
+    expect(store.users.has(second.id)).toBe(false);
+    expect(store.accounts.get(accountKey("google", "google_123"))?.userId).toBe(first.id);
   });
 
   it("links a new provider to the current session user", async () => {
@@ -108,6 +135,32 @@ describe("AuthService provider linking", () => {
         }),
       ),
     ).rejects.toBeInstanceOf(AccountLinkConflict);
+  });
+
+  it("merges an existing provider duplicate into the current session user", async () => {
+    const { service, store } = await makeTestAuth();
+    const current = currentUser({ id: "current", login: "current" });
+    const duplicate = currentUser({ id: "duplicate", login: "current-2" });
+    store.users.set(current.id, current);
+    store.users.set(duplicate.id, duplicate);
+    store.accounts.set(accountKey("github", "github"), {
+      profile: githubProfile({ email: "alex@example.com", providerAccountId: "github" }),
+      userId: current.id,
+    });
+    store.accounts.set(accountKey("google", "google_123"), {
+      profile: googleProfile({ email: "alex@example.com" }),
+      userId: duplicate.id,
+    });
+
+    const result = await runAuth(
+      service.signInWithProvider(googleProfile({ email: "alex@example.com" }), {
+        currentUser: current,
+      }),
+    );
+
+    expect(result.user.id).toBe(current.id);
+    expect(store.users.has(duplicate.id)).toBe(false);
+    expect(store.accounts.get(accountKey("google", "google_123"))?.userId).toBe(current.id);
   });
 });
 
@@ -194,6 +247,27 @@ async function makeTestAuth() {
           .filter((account) => account.userId === userId)
           .map(({ profile }) => toSummary(profile)),
       ),
+    mergeUsers: ({ sourceUserId, targetUserId }) =>
+      Effect.sync(() => {
+        const target = store.users.get(targetUserId);
+        if (target === undefined) {
+          throw new Error(`missing test user ${targetUserId}`);
+        }
+
+        for (const account of store.accounts.values()) {
+          if (account.userId === sourceUserId) {
+            account.userId = targetUserId;
+          }
+        }
+        for (const session of store.sessions) {
+          if (session.userId === sourceUserId) {
+            session.userId = targetUserId;
+          }
+        }
+        store.users.delete(sourceUserId);
+
+        return target;
+      }),
     findSessionUser: (sessionId) =>
       Effect.sync(() => {
         const session = store.sessions.find((entry) => entry.id === sessionId);

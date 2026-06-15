@@ -77,6 +77,10 @@ interface AuthRepositoryShape {
     profile: OAuthProfile,
   ): Effect.Effect<CurrentUser, DatabaseError, any>;
   listAccounts(userId: string): Effect.Effect<UserAccountSummary[], DatabaseError, any>;
+  mergeUsers(input: {
+    sourceUserId: string;
+    targetUserId: string;
+  }): Effect.Effect<CurrentUser, DatabaseError, any>;
   findSessionUser(
     sessionId: string,
     now: Date,
@@ -117,22 +121,47 @@ const makeAuthService = Effect.fn("makeAuthService")(function* () {
         );
         if (Option.isSome(existing)) {
           if (options?.currentUser !== undefined && options.currentUser.id !== existing.value.id) {
-            return yield* Effect.fail(new AccountLinkConflict({ provider: profile.provider }));
+            const canMerge = yield* canMergeVerifiedEmailConflict(
+              profile,
+              existing.value,
+              options.currentUser,
+            );
+            if (!canMerge) {
+              return yield* Effect.fail(new AccountLinkConflict({ provider: profile.provider }));
+            }
+
+            yield* repository.mergeUsers({
+              sourceUserId: existing.value.id,
+              targetUserId: options.currentUser.id,
+            });
+            const user = yield* repository.linkAccount(options.currentUser.id, profile);
+            const merged = yield* mergeVerifiedEmailUsersInto(user, profile);
+            return yield* mintSession(merged);
           }
 
-          const user = yield* repository.linkAccount(existing.value.id, profile);
-          return yield* mintSession(user);
+          const target = yield* canonicalVerifiedEmailUser(profile, existing.value);
+          if (target.id !== existing.value.id) {
+            yield* repository.mergeUsers({
+              sourceUserId: existing.value.id,
+              targetUserId: target.id,
+            });
+          }
+          const user = yield* repository.linkAccount(target.id, profile);
+          const merged = yield* mergeVerifiedEmailUsersInto(user, profile);
+          return yield* mintSession(merged);
         }
 
         if (options?.currentUser !== undefined) {
           const user = yield* repository.linkAccount(options.currentUser.id, profile);
-          return yield* mintSession(user);
+          const merged = yield* mergeVerifiedEmailUsersInto(user, profile);
+          return yield* mintSession(merged);
         }
 
-        const emailUser = yield* uniqueVerifiedEmailUser(profile);
-        if (Option.isSome(emailUser)) {
-          const user = yield* repository.linkAccount(emailUser.value.id, profile);
-          return yield* mintSession(user);
+        const emailUsers = yield* verifiedEmailUsers(profile);
+        if (emailUsers.length > 0) {
+          const user = yield* repository.linkAccount(emailUsers[0]!.id, profile);
+          const merged = yield* mergeVerifiedEmailUsersInto(user, profile);
+          return yield* mintSession(merged);
         }
 
         const login = yield* nextAvailableLogin(loginBaseFromProfile(profile));
@@ -153,17 +182,52 @@ const makeAuthService = Effect.fn("makeAuthService")(function* () {
     }),
   });
 
-  function uniqueVerifiedEmailUser(profile: OAuthProfile) {
+  function verifiedEmailUsers(profile: OAuthProfile) {
     if (!profile.emailVerified || profile.email === null) {
-      return Effect.succeed(Option.none<CurrentUser>());
+      return Effect.succeed([]);
     }
 
-    const email = profile.email;
     return Effect.gen(function* () {
-      const users = yield* repository.findUsersByVerifiedEmail(email);
-      const uniqueUsers = [...new Map(users.map((user) => [user.id, user])).values()];
+      const users = yield* repository.findUsersByVerifiedEmail(profile.email!);
+      return [...new Map(users.map((user) => [user.id, user])).values()];
+    });
+  }
 
-      return uniqueUsers.length === 1 ? Option.some(uniqueUsers[0]!) : Option.none<CurrentUser>();
+  function canMergeVerifiedEmailConflict(
+    profile: OAuthProfile,
+    source: CurrentUser,
+    target: CurrentUser,
+  ) {
+    return Effect.gen(function* () {
+      const users = yield* verifiedEmailUsers(profile);
+      const userIds = new Set(users.map((user) => user.id));
+
+      return userIds.has(source.id) && userIds.has(target.id);
+    });
+  }
+
+  function canonicalVerifiedEmailUser(profile: OAuthProfile, fallback: CurrentUser) {
+    return Effect.gen(function* () {
+      const users = yield* verifiedEmailUsers(profile);
+      return users[0] ?? fallback;
+    });
+  }
+
+  function mergeVerifiedEmailUsersInto(target: CurrentUser, profile: OAuthProfile) {
+    return Effect.gen(function* () {
+      const users = yield* verifiedEmailUsers(profile);
+      let merged = target;
+
+      for (const user of users) {
+        if (user.id !== target.id) {
+          merged = yield* repository.mergeUsers({
+            sourceUserId: user.id,
+            targetUserId: target.id,
+          });
+        }
+      }
+
+      return merged;
     });
   }
 
