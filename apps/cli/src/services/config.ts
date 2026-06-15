@@ -65,6 +65,11 @@ const runtimeConfigTable: Record<TokenmaxxingEnvironment, { apiUrl: string; wwwU
   },
 };
 
+const legacyProductionUrls = {
+  apiUrl: new Set(["https://api.tokenmaxxing.851.sh"]),
+  wwwUrl: new Set(["https://tokenmaxxing.851.sh"]),
+};
+
 function getEnvironment(
   env: Record<string, string | undefined> = process.env,
 ): TokenmaxxingEnvironment {
@@ -118,9 +123,13 @@ function applyEnvOverrides(config: CliConfig, env: Record<string, string | undef
 function normalizeConfig(config: Partial<CliConfig>, fallback: CliConfig): CliConfig {
   return {
     ...config,
-    apiUrl: config.apiUrl ?? fallback.apiUrl,
-    wwwUrl: config.wwwUrl ?? fallback.wwwUrl,
+    apiUrl: normalizeStoredUrl("apiUrl", config.apiUrl ?? fallback.apiUrl),
+    wwwUrl: normalizeStoredUrl("wwwUrl", config.wwwUrl ?? fallback.wwwUrl),
   };
+}
+
+function normalizeStoredUrl(key: "apiUrl" | "wwwUrl", value: string): string {
+  return legacyProductionUrls[key].has(value) ? runtimeConfigTable.production[key] : value;
 }
 
 function readConfigFileProgram(
