@@ -80,9 +80,12 @@ function Heatmap({ accent, byDate, first, last }: HeatmapProps) {
       <div className="overflow-x-auto" ref={scrollRef}>
         <svg
           aria-label={`Daily spend heatmap from ${formatDay(first)} to ${formatDay(last)}`}
-          className="block"
+          className="block h-auto w-full"
+          height={height}
           onPointerLeave={() => setHovered(null)}
+          preserveAspectRatio="xMinYMin meet"
           role="img"
+          style={{ minWidth: width }}
           viewBox={`0 0 ${width} ${height}`}
           width={width}
         >

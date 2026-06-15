@@ -28,6 +28,7 @@ const Route = createFileRoute("/$user")({
 
 /** The daily-bars chart stays readable up to roughly this many days. */
 const DAILY_WINDOW = 184;
+const HEATMAP_WINDOW = 365;
 
 const countFormatter = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 
@@ -137,7 +138,7 @@ function ProfileDashboard({ rows, stats }: { rows: readonly DailyRow[]; stats: D
 
       <section className="bg-card p-5">
         <h2 className="font-medium">Activity heatmap</h2>
-        <div className="mt-4 overflow-x-auto">
+        <div className="mt-4">
           {derived.heatmap !== null ? (
             <Heatmap
               accent={derived.accent}
@@ -172,6 +173,7 @@ function deriveCharts(rows: readonly DailyRow[]) {
   const first = rows[0]?.date ?? null;
   const last = rows.at(-1)?.date ?? null;
   const allDays = first !== null && last !== null ? enumerateDays(first, last) : [];
+  const heatmapFirst = last !== null ? addDaysKey(last, -(HEATMAP_WINDOW - 1)) : null;
 
   const familyOrder = [...colors.keys()];
   const stackedDays: StackedDay[] = allDays.slice(-DAILY_WINDOW).map((date) => {
@@ -205,13 +207,21 @@ function deriveCharts(rows: readonly DailyRow[]) {
   return {
     accent,
     cumulative,
-    heatmap: first !== null && last !== null ? { first, last } : null,
+    heatmap: heatmapFirst !== null && last !== null ? { first: heatmapFirst, last } : null,
     legend: familyOrder.map((family) => ({ color: colors.get(family) ?? "#9ca3af", family })),
     months,
     outputTokens,
     spendByDate,
     stackedDays,
   };
+}
+
+function addDaysKey(date: string, days: number): string {
+  const [year, month, day] = date.split("-").map(Number);
+  const result = new Date(Date.UTC(year ?? 0, (month ?? 1) - 1, day ?? 1));
+  result.setUTCDate(result.getUTCDate() + days);
+
+  return result.toISOString().slice(0, 10);
 }
 
 export { Route };
