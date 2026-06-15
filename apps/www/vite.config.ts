@@ -10,6 +10,12 @@ const config = defineConfig({
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
+  // Base UI ships ESM that imports React; let Vite bundle it through the app's
+  // React instance for SSR instead of pre-bundling it (which resolves React to
+  // null and forces a client-render fallback).
+  ssr: {
+    noExternal: ["@base-ui-components/react"],
+  },
   plugins: [tanstackStart(), react(), tailwindcss()],
 });
 
