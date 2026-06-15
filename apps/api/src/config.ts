@@ -32,10 +32,16 @@ interface GitHubOAuthConfig {
   clientSecret: string;
 }
 
+interface GoogleOAuthConfig {
+  clientId: string;
+  clientSecret: string;
+}
+
 interface AppConfigShape {
   apiWorkerName: string;
   corsOrigins: string[];
   github: GitHubOAuthConfig;
+  google: GoogleOAuthConfig;
   productName: string;
   urls: RuntimeUrls;
 }
@@ -53,6 +59,8 @@ class AppConfig extends Context.Service<AppConfig, AppConfigShape>()(
   static readonly fromEnv = Effect.gen(function* () {
     const githubClientId = yield* Config.string("GITHUB_CLIENT_ID");
     const githubClientSecret = yield* Config.redacted("GITHUB_CLIENT_SECRET");
+    const googleClientId = yield* Config.string("GOOGLE_CLIENT_ID");
+    const googleClientSecret = yield* Config.redacted("GOOGLE_CLIENT_SECRET");
 
     return makeAppConfig(
       {},
@@ -60,6 +68,10 @@ class AppConfig extends Context.Service<AppConfig, AppConfigShape>()(
         github: {
           clientId: githubClientId,
           clientSecret: Redacted.value(githubClientSecret),
+        },
+        google: {
+          clientId: googleClientId,
+          clientSecret: Redacted.value(googleClientSecret),
         },
       },
     );
@@ -72,6 +84,7 @@ interface AppConfigEnv {
 
 interface AppConfigSecrets {
   github: GitHubOAuthConfig;
+  google: GoogleOAuthConfig;
 }
 
 function makeAppConfig(env: AppConfigEnv, secrets: AppConfigSecrets): AppConfigShape {
@@ -105,4 +118,11 @@ function resolveRuntimeUrls(env: AppConfigEnv): RuntimeUrls {
 
 export { AppConfig, makeAppConfig };
 
-export type { AppConfigEnv, AppConfigSecrets, AppConfigShape, GitHubOAuthConfig, RuntimeUrls };
+export type {
+  AppConfigEnv,
+  AppConfigSecrets,
+  AppConfigShape,
+  GitHubOAuthConfig,
+  GoogleOAuthConfig,
+  RuntimeUrls,
+};

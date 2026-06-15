@@ -19,6 +19,20 @@ const MeResponse = Schema.Struct({
   user: AuthUser,
 });
 
+const OAuthProviderId = Schema.Literals(["github", "google"]);
+
+type OAuthProviderId = typeof OAuthProviderId.Type;
+
+const UserAccountSummary = Schema.Struct({
+  avatarUrl: Schema.NullOr(Schema.String),
+  email: Schema.NullOr(Schema.String),
+  emailVerified: Schema.Boolean,
+  login: Schema.NullOr(Schema.String),
+  name: Schema.NullOr(Schema.String),
+  provider: OAuthProviderId,
+  providerAccountId: Schema.String,
+});
+
 /** Identity resolved from a `tmx_` bearer token (CLI clients). */
 const CliIdentity = Schema.Struct({
   deviceId: Schema.NullOr(Schema.String),
@@ -212,6 +226,7 @@ export {
   LeaderboardResponse,
   LeaderboardWindow,
   MeResponse,
+  OAuthProviderId,
   OkResponse,
   ProfileDailyGroupBy,
   ProfileDailyResponse,
@@ -220,5 +235,6 @@ export {
   ProfileStats,
   SyncUsageInput,
   SyncUsageResponse,
+  UserAccountSummary,
   UsageDayInput,
 };

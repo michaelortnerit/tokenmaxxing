@@ -12,9 +12,16 @@ import {
   STATE_COOKIE,
 } from "../../auth/cookies";
 import { generateToken } from "../../auth/crypto";
-import { AuthService } from "../../auth/service";
-import { AppConfig } from "../../config";
+import {
+  AuthService,
+  type AuthServiceShape,
+  type CurrentUser,
+  type OAuthProfile,
+  type OAuthProviderId,
+} from "../../auth/service";
+import { AppConfig, type AppConfigShape } from "../../config";
 import { buildAuthorizeUrl, GitHubClient } from "../../github/client";
+import { buildGoogleAuthorizeUrl, GoogleClient } from "../../google/client";
 
 /**
  * Routes that cannot live in the HttpApi contract: the OAuth browser flow
@@ -23,90 +30,114 @@ import { buildAuthorizeUrl, GitHubClient } from "../../github/client";
  * endpoints.
  */
 
-const oauthStartRoute = HttpRouter.add(
-  "GET",
-  "/auth/github/start",
-  Effect.gen(function* () {
-    const request = yield* HttpServerRequest.HttpServerRequest;
-    const config = yield* AppConfig;
-    const scope = cookieScopeFor(request.headers["host"] ?? "");
-    const url = new URL(request.url, "http://localhost");
-    const redirectPath = sanitizeOAuthRedirectPath(url.searchParams.get("redirect"));
-    const state = encodeOAuthState(generateToken(), redirectPath);
+const githubOAuthStartRoute = oauthStartRoute("github");
+const googleOAuthStartRoute = oauthStartRoute("google");
+const githubOAuthCallbackRoute = oauthCallbackRoute("github");
+const googleOAuthCallbackRoute = oauthCallbackRoute("google");
 
-    return HttpServerResponse.empty({ status: 302 }).pipe(
-      HttpServerResponse.setHeaders({
-        location: buildAuthorizeUrl(
-          config.github,
-          `${scope.apiOrigin}/auth/github/callback`,
-          state,
-        ),
-        "set-cookie": cookie(scope, STATE_COOKIE, state, 600),
-      }),
-    );
-  }),
-);
+function oauthStartRoute(provider: OAuthProviderId) {
+  return HttpRouter.add(
+    "GET",
+    `/auth/${provider}/start`,
+    Effect.gen(function* () {
+      const request = yield* HttpServerRequest.HttpServerRequest;
+      const config = yield* AppConfig;
+      const scope = cookieScopeFor(request.headers["host"] ?? "");
+      const url = new URL(request.url, "http://localhost");
+      const redirectPath = sanitizeOAuthRedirectPath(url.searchParams.get("redirect"));
+      const state = encodeOAuthState(generateToken(), redirectPath);
 
-const oauthCallbackRoute = HttpRouter.add(
-  "GET",
-  "/auth/github/callback",
-  Effect.gen(function* () {
-    const request = yield* HttpServerRequest.HttpServerRequest;
-    const scope = cookieScopeFor(request.headers["host"] ?? "");
-    const url = new URL(request.url, "http://localhost");
-    const code = url.searchParams.get("code");
-    const state = url.searchParams.get("state");
-    const expectedState = readCookie(request, STATE_COOKIE);
-    if (code === null || state === null || expectedState === null || state !== expectedState) {
-      return HttpServerResponse.jsonUnsafe(
-        { error: { code: "oauth_state_mismatch", message: "Sign-in expired; try again." } },
-        { status: 400 },
-      );
-    }
-    const redirectPath = redirectPathFromOAuthState(state);
-
-    const auth = yield* AuthService;
-    const github = yield* GitHubClient;
-    const result = yield* Effect.gen(function* () {
-      const accessToken = yield* github.exchangeCode(
-        code,
-        `${scope.apiOrigin}/auth/github/callback`,
-      );
-      const profile = yield* github.fetchUser(accessToken);
-      // The GitHub access token is dropped here on purpose — identity is
-      // all this product needs.
-      return yield* auth.signInWithGitHub({
-        avatarUrl: profile.avatarUrl,
-        githubId: profile.githubId,
-        login: profile.login,
-        name: profile.name,
-      });
-    }).pipe(
-      Effect.map(Option.some),
-      Effect.catchCause((cause) =>
-        Effect.sync(() => {
-          console.error("github oauth callback failed", String(cause).slice(0, 500));
-          return Option.none<{ token: string; user: { login: string } }>();
+      return HttpServerResponse.empty({ status: 302 }).pipe(
+        HttpServerResponse.setHeaders({
+          location: buildProviderAuthorizeUrl(
+            provider,
+            config,
+            `${scope.apiOrigin}/auth/${provider}/callback`,
+            state,
+          ),
+          "set-cookie": cookie(scope, STATE_COOKIE, state, 600),
         }),
-      ),
-    );
+      );
+    }),
+  );
+}
 
-    return Option.match(result, {
-      onNone: () =>
-        HttpServerResponse.jsonUnsafe(
-          { error: { code: "oauth_failed", message: "GitHub sign-in failed; try again." } },
-          { status: 502 },
+function oauthCallbackRoute(provider: OAuthProviderId) {
+  return HttpRouter.add(
+    "GET",
+    `/auth/${provider}/callback`,
+    Effect.gen(function* () {
+      const request = yield* HttpServerRequest.HttpServerRequest;
+      const scope = cookieScopeFor(request.headers["host"] ?? "");
+      const url = new URL(request.url, "http://localhost");
+      const code = url.searchParams.get("code");
+      const state = url.searchParams.get("state");
+      const expectedState = readCookie(request, STATE_COOKIE);
+      if (code === null || state === null || expectedState === null || state !== expectedState) {
+        return HttpServerResponse.jsonUnsafe(
+          { error: { code: "oauth_state_mismatch", message: "Sign-in expired; try again." } },
+          { status: 400 },
+        );
+      }
+      const redirectPath = redirectPathFromOAuthState(state);
+
+      const auth = yield* AuthService;
+      const result = yield* Effect.gen(function* () {
+        const currentUser = yield* currentUserFromRequest(request, auth);
+        const profile = yield* fetchProviderProfile(
+          provider,
+          code,
+          `${scope.apiOrigin}/auth/${provider}/callback`,
+        ).pipe(Effect.orDie);
+        // Provider access tokens are dropped here on purpose — identity is all
+        // this product needs after sign-in/linking.
+        const options = currentUser === null ? undefined : { currentUser };
+        const signedIn = yield* auth.signInWithProvider(profile, options);
+        return { _tag: "success" as const, ...signedIn };
+      }).pipe(
+        Effect.catchTag("AccountLinkConflict", () =>
+          Effect.succeed({ _tag: "conflict" as const, provider }),
         ),
-      onSome: ({ token, user }) =>
-        HttpServerResponse.empty({ status: 302 }).pipe(
-          HttpServerResponse.setHeaders({
-            location: `${scope.wwwOrigin}${redirectPath ?? defaultOAuthRedirectPath(user.login)}`,
-            "set-cookie": cookie(scope, SESSION_COOKIE, token, 30 * 24 * 60 * 60),
+        Effect.catchCause((cause) =>
+          Effect.sync(() => {
+            console.error(`${provider} oauth callback failed`, String(cause).slice(0, 500));
+            return { _tag: "failed" as const };
           }),
         ),
-    });
-  }),
-);
+      );
+
+      switch (result._tag) {
+        case "conflict":
+          return HttpServerResponse.jsonUnsafe(
+            {
+              error: {
+                code: "oauth_account_conflict",
+                message: `That ${providerLabel(provider)} account is already connected to another tokenmaxxing profile.`,
+              },
+            },
+            { status: 409 },
+          );
+        case "failed":
+          return HttpServerResponse.jsonUnsafe(
+            {
+              error: {
+                code: "oauth_failed",
+                message: `${providerLabel(provider)} sign-in failed; try again.`,
+              },
+            },
+            { status: 502 },
+          );
+        case "success":
+          return HttpServerResponse.empty({ status: 302 }).pipe(
+            HttpServerResponse.setHeaders({
+              location: `${scope.wwwOrigin}${redirectPath ?? defaultOAuthRedirectPath(result.user.login)}`,
+              "set-cookie": cookie(scope, SESSION_COOKIE, result.token, 30 * 24 * 60 * 60),
+            }),
+          );
+      }
+    }),
+  );
+}
 
 // Clears the cookie even for expired sessions, so it stays outside the
 // Authorization middleware.
@@ -128,7 +159,72 @@ const signoutRoute = HttpRouter.add(
   }),
 );
 
-const oauthRoutesLayer = Layer.mergeAll(oauthStartRoute, oauthCallbackRoute, signoutRoute);
+const oauthRoutesLayer = Layer.mergeAll(
+  githubOAuthStartRoute,
+  githubOAuthCallbackRoute,
+  googleOAuthStartRoute,
+  googleOAuthCallbackRoute,
+  signoutRoute,
+);
+
+function buildProviderAuthorizeUrl(
+  provider: OAuthProviderId,
+  config: AppConfigShape,
+  redirectUri: string,
+  state: string,
+): string {
+  switch (provider) {
+    case "github":
+      return buildAuthorizeUrl(config.github, redirectUri, state);
+    case "google":
+      return buildGoogleAuthorizeUrl(config.google, redirectUri, state);
+  }
+}
+
+function fetchProviderProfile(
+  provider: OAuthProviderId,
+  code: string,
+  redirectUri: string,
+): Effect.Effect<OAuthProfile, unknown, GitHubClient | GoogleClient> {
+  switch (provider) {
+    case "github":
+      return Effect.gen(function* () {
+        const github = yield* GitHubClient;
+        const accessToken = yield* github.exchangeCode(code, redirectUri);
+        return yield* github.fetchUser(accessToken);
+      });
+    case "google":
+      return Effect.gen(function* () {
+        const google = yield* GoogleClient;
+        const accessToken = yield* google.exchangeCode(code, redirectUri);
+        return yield* google.fetchUser(accessToken);
+      });
+  }
+}
+
+function currentUserFromRequest(
+  request: HttpServerRequest.HttpServerRequest,
+  auth: AuthServiceShape,
+): Effect.Effect<CurrentUser | null, never, any> {
+  const token = sessionTokenFrom(request);
+  if (token === null) {
+    return Effect.succeed(null);
+  }
+
+  return auth.resolveSession(token).pipe(
+    Effect.map((user) => (Option.isSome(user) ? user.value : null)),
+    Effect.catchCause(() => Effect.succeed(null)),
+  );
+}
+
+function providerLabel(provider: OAuthProviderId): string {
+  switch (provider) {
+    case "github":
+      return "GitHub";
+    case "google":
+      return "Google";
+  }
+}
 
 function sanitizeOAuthRedirectPath(value: string | null): string | null {
   if (value === null) {

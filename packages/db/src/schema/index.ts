@@ -2,13 +2,35 @@ import { index, integer, primaryKey, real, sqliteTable, text } from "drizzle-orm
 
 const users = sqliteTable("users", {
   id: text("id").primaryKey(),
-  githubId: integer("github_id").notNull().unique("users_github_id_unique"),
   login: text("login").notNull().unique("users_login_unique"),
   name: text("name"),
   avatarUrl: text("avatar_url"),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
+
+const userAccounts = sqliteTable(
+  "user_accounts",
+  {
+    provider: text("provider", { enum: ["github", "google"] }).notNull(),
+    providerAccountId: text("provider_account_id").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    email: text("email"),
+    emailVerified: integer("email_verified", { mode: "boolean" }).notNull().default(false),
+    login: text("login"),
+    name: text("name"),
+    avatarUrl: text("avatar_url"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.provider, table.providerAccountId] }),
+    index("user_accounts_user_idx").on(table.userId),
+    index("user_accounts_email_idx").on(table.email),
+  ],
+);
 
 /** id = sha256(token); the raw token lives only in the browser cookie. */
 const sessions = sqliteTable(
@@ -112,6 +134,8 @@ const usageDays = sqliteTable(
 
 type User = typeof users.$inferSelect;
 type NewUser = typeof users.$inferInsert;
+type UserAccount = typeof userAccounts.$inferSelect;
+type NewUserAccount = typeof userAccounts.$inferInsert;
 type Session = typeof sessions.$inferSelect;
 type NewSession = typeof sessions.$inferInsert;
 type CliLoginRequest = typeof cliLoginRequests.$inferSelect;
@@ -123,7 +147,7 @@ type NewDevice = typeof devices.$inferInsert;
 type UsageDay = typeof usageDays.$inferSelect;
 type NewUsageDay = typeof usageDays.$inferInsert;
 
-export { cliLoginRequests, cliTokens, devices, sessions, usageDays, users };
+export { cliLoginRequests, cliTokens, devices, sessions, usageDays, userAccounts, users };
 
 export type {
   CliLoginRequest,
@@ -133,9 +157,11 @@ export type {
   NewCliToken,
   NewDevice,
   NewSession,
+  NewUserAccount,
   NewUsageDay,
   NewUser,
   Session,
   UsageDay,
+  UserAccount,
   User,
 };

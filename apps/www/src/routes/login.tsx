@@ -23,7 +23,7 @@ function LoginPage() {
     <Card className="mx-auto mt-24 flex max-w-sm flex-col items-center p-8 text-center">
       <h1 className="text-xl font-semibold tracking-tight">Sign in to tokenmaxxing</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        Your GitHub identity is your profile — nothing else is requested.
+        Choose an OAuth provider to create or access your profile.
       </p>
       <OAuthProviderButtons className="mt-6" redirect={redirect} />
     </Card>

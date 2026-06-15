@@ -20,6 +20,11 @@ const devicesQueryOptions = queryOptions({
   queryFn: () => runApi((client) => client.me.listDevices()),
 });
 
+const accountsQueryOptions = queryOptions({
+  queryKey: ["me", "accounts"],
+  queryFn: () => runApi((client) => client.me.listAccounts()),
+});
+
 const tokensQueryOptions = queryOptions({
   queryKey: ["me", "tokens"],
   queryFn: () => runApi((client) => client.me.listTokens()),
@@ -54,6 +59,7 @@ function profileDailyQueryOptions(login: string) {
 }
 
 export {
+  accountsQueryOptions,
   devicesQueryOptions,
   leaderboardQueryOptions,
   meQueryOptions,

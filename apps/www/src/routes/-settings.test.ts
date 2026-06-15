@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { meQueryOptions } from "../lib/queries";
 import {
+  accountLabel,
   confirmDeviceDelete,
   deviceDeleteConfirmationMessage,
   deviceDeleteInvalidationKeys,
@@ -95,5 +96,33 @@ describe("device deletion helpers", () => {
     expect(deviceDeleteConfirmationMessage("tuftlords-MBP.localdomain")).toContain(
       "revokes its CLI tokens",
     );
+  });
+});
+
+describe("accountLabel", () => {
+  it("prefers email, then provider login, then provider name", () => {
+    expect(
+      accountLabel({
+        avatarUrl: null,
+        email: "alex@example.com",
+        emailVerified: true,
+        login: "alex",
+        name: "Alex",
+        provider: "google",
+        providerAccountId: "google_123",
+      }),
+    ).toBe("alex@example.com");
+
+    expect(
+      accountLabel({
+        avatarUrl: null,
+        email: null,
+        emailVerified: false,
+        login: "pondorasti",
+        name: "Alex",
+        provider: "github",
+        providerAccountId: "github_123",
+      }),
+    ).toBe("pondorasti");
   });
 });

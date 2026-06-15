@@ -32,6 +32,7 @@ import {
   ProfileResponse,
   SyncUsageInput,
   SyncUsageResponse,
+  UserAccountSummary,
 } from "./schemas";
 
 /**
@@ -51,6 +52,11 @@ class MeGroup extends HttpApiGroup.make("me")
   .add(
     HttpApiEndpoint.get("me", "/me", {
       success: MeResponse,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.get("listAccounts", "/me/accounts", {
+      success: Schema.Struct({ accounts: Schema.Array(UserAccountSummary) }),
     }),
   )
   .add(

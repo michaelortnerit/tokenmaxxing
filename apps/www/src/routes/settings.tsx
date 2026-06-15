@@ -2,20 +2,31 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tansta
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeader } from "@tanstack/react-start/server";
-import { DeviceSummary, MeResponse } from "@tokenmaxxing/api-contract";
+import { DeviceSummary, MeResponse, UserAccountSummary } from "@tokenmaxxing/api-contract";
 import * as Schema from "effect/Schema";
-import { Laptop, KeyRound } from "lucide-react";
+import { KeyRound, Laptop, Link2 } from "lucide-react";
 
-import { Button } from "../components/ui/button";
+import {
+  oauthProviderLabel,
+  oauthProviderLinks,
+  type OAuthProviderId,
+} from "../components/oauth-providers";
+import { Button, buttonClassName } from "../components/ui/button";
 import { Code } from "../components/ui/code";
 import { errorMessage, runApi } from "../lib/api";
 import { resolveApiUrl } from "../lib/config";
-import { devicesQueryOptions, meQueryOptions, tokensQueryOptions } from "../lib/queries";
+import {
+  accountsQueryOptions,
+  devicesQueryOptions,
+  meQueryOptions,
+  tokensQueryOptions,
+} from "../lib/queries";
 
 const SETTINGS_PATH = "/settings";
 
 type Me = typeof MeResponse.Type;
 type Device = typeof DeviceSummary.Type;
+type Account = typeof UserAccountSummary.Type;
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 type DeviceDeleteInvalidationKey = readonly unknown[];
 
@@ -85,9 +96,68 @@ function SettingsPage() {
           Signed in as <span className="font-medium">{me.data.user.login}</span>
         </p>
       </div>
+      <ConnectedAccountsSection />
       <DevicesSection login={me.data.user.login} />
       <TokensSection />
     </div>
+  );
+}
+
+function ConnectedAccountsSection() {
+  const accounts = useQuery(accountsQueryOptions);
+  const byProvider =
+    accounts.data === undefined
+      ? new Map<OAuthProviderId, Account>()
+      : new Map(accounts.data.accounts.map((account) => [account.provider, account]));
+  const providerLinks = oauthProviderLinks({ redirect: SETTINGS_PATH });
+
+  return (
+    <section>
+      <h2 className="flex items-center gap-2 text-lg font-medium">
+        <Link2 className="size-4" /> Connected accounts
+      </h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Sign in with any connected provider to reach the same profile.
+      </p>
+      <div className="mt-4 overflow-hidden rounded-lg border border-border">
+        {accounts.isPending ? (
+          <p className="p-4 text-sm text-muted-foreground">Loading…</p>
+        ) : accounts.isError ? (
+          <p className="p-4 text-sm text-red-500">
+            {errorMessage(accounts.error, "Could not load connected accounts.")}
+          </p>
+        ) : (
+          <table className="w-full text-sm">
+            <tbody>
+              {providerLinks.map((provider) => {
+                const account = byProvider.get(provider.id);
+
+                return (
+                  <tr className="border-b border-border last:border-b-0" key={provider.id}>
+                    <td className="p-3 font-medium">{oauthProviderLabel(provider.id)}</td>
+                    <td className="p-3 text-muted-foreground">
+                      {account === undefined ? "Not connected" : accountLabel(account)}
+                    </td>
+                    <td className="p-3 text-right">
+                      {account === undefined ? (
+                        <a
+                          className={buttonClassName({ variant: "primary", size: "sm" })}
+                          href={provider.href}
+                        >
+                          Connect
+                        </a>
+                      ) : (
+                        <span className="text-muted-foreground">Connected</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -227,6 +297,10 @@ function TokensSection() {
   );
 }
 
+function accountLabel(account: Account): string {
+  return account.email ?? account.login ?? account.name ?? "Connected";
+}
+
 function deviceDeleteConfirmationMessage(deviceName: string): string {
   return `Delete synced usage for ${deviceName}? This removes the device from your profile and revokes its CLI tokens.`;
 }
@@ -243,6 +317,7 @@ function deviceDeleteInvalidationKeys(login: string): DeviceDeleteInvalidationKe
 }
 
 export {
+  accountLabel,
   confirmDeviceDelete,
   deviceDeleteConfirmationMessage,
   deviceDeleteInvalidationKeys,

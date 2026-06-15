@@ -5,6 +5,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 
 import { AppConfig, type GitHubOAuthConfig } from "../config";
+import type { OAuthProfile } from "../auth/service";
 
 /**
  * Every call this worker makes to GitHub: the OAuth code exchange and the
@@ -15,17 +16,10 @@ class GitHubApiError extends Data.TaggedError("GitHubApiError")<{
   readonly cause: unknown;
 }> {}
 
-interface GitHubUserProfile {
-  avatarUrl: string | null;
-  githubId: number;
-  login: string;
-  name: string | null;
-}
-
 interface GitHubClientShape {
   /** OAuth authorization-code exchange; returns the user access token. */
   exchangeCode(code: string, redirectUri: string): Effect.Effect<string, GitHubApiError>;
-  fetchUser(accessToken: string): Effect.Effect<GitHubUserProfile, GitHubApiError>;
+  fetchUser(accessToken: string): Effect.Effect<OAuthProfile, GitHubApiError>;
 }
 
 class GitHubClient extends Context.Service<GitHubClient, GitHubClientShape>()(
@@ -89,16 +83,42 @@ const makeGitHubClient = Effect.fn("makeGitHubClient")(function* () {
         HttpClientRequest.get("https://api.github.com/user", {
           headers: githubHeaders(accessToken),
         }),
-      )) as { avatar_url?: string; id: number; login: string; name?: string | null };
+      )) as {
+        avatar_url?: string;
+        email?: string | null;
+        id: number;
+        login: string;
+        name?: string | null;
+      };
+      const email = yield* fetchPrimaryVerifiedEmail(accessToken).pipe(
+        Effect.catchCause(() => Effect.succeed(null)),
+      );
 
       return {
         avatarUrl: payload.avatar_url ?? null,
-        githubId: payload.id,
+        email: email ?? payload.email ?? null,
+        emailVerified: email !== null,
         login: payload.login,
         name: payload.name ?? null,
+        provider: "github",
+        providerAccountId: String(payload.id),
       };
     }),
   });
+
+  function fetchPrimaryVerifiedEmail(accessToken: string) {
+    return Effect.gen(function* () {
+      const payload = (yield* requestJson(
+        HttpClientRequest.get("https://api.github.com/user/emails", {
+          headers: githubHeaders(accessToken),
+        }),
+      )) as { email?: string; primary?: boolean; verified?: boolean }[];
+
+      return (
+        payload.find((email) => email.primary === true && email.verified === true)?.email ?? null
+      );
+    });
+  }
 });
 
 function buildAuthorizeUrl(config: GitHubOAuthConfig, redirectUri: string, state: string): string {
@@ -106,7 +126,7 @@ function buildAuthorizeUrl(config: GitHubOAuthConfig, redirectUri: string, state
   url.searchParams.set("client_id", config.clientId);
   url.searchParams.set("redirect_uri", redirectUri);
   // Identity only; the public profile is all the leaderboard needs.
-  url.searchParams.set("scope", "read:user");
+  url.searchParams.set("scope", "read:user user:email");
   url.searchParams.set("state", state);
 
   return url.toString();
@@ -114,4 +134,4 @@ function buildAuthorizeUrl(config: GitHubOAuthConfig, redirectUri: string, state
 
 export { buildAuthorizeUrl, GitHubApiError, GitHubClient, makeGitHubClient };
 
-export type { GitHubClientShape, GitHubUserProfile };
+export type { GitHubClientShape };

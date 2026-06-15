@@ -9,7 +9,7 @@ to your public profile.
 ## Usage
 
 ```bash
-bunx @851-labs/tokenmaxxing@latest login   # sign in with GitHub, approves this device
+bunx @851-labs/tokenmaxxing@latest login   # sign in in the browser, approves this device
 bunx @851-labs/tokenmaxxing@latest sync    # parse local usage and push it
 ```
 

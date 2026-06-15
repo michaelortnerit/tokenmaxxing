@@ -50,8 +50,9 @@ bun run typecheck
 bun run test
 ```
 
-Copy `.env.example` to `.env` and fill in the GitHub OAuth pair (dev
-callback `http://api.tokenmaxxing.localhost:8788/auth/github/callback`).
+Copy `.env.example` to `.env` and fill in the GitHub and Google OAuth pairs.
+Dev callbacks are `http://api.tokenmaxxing.localhost:8788/auth/github/callback`
+and `http://api.tokenmaxxing.localhost:8788/auth/google/callback`.
 Run the CLI against the dev stack with
 `TOKENMAXXING_ENV=development bun apps/cli/src/index.ts <command>`.
 
@@ -60,9 +61,10 @@ Run the CLI against the dev stack with
 Every push to `main` deploys via GitHub Actions (typecheck + tests gate
 it). Deploy state lives on a Cloudflare state-store worker
 (`alchemy cloudflare bootstrap`), shared between CI and local machines —
-`bun run deploy` does the same deploy locally, reading the prod OAuth pair
+`bun run deploy` does the same deploy locally, reading the prod OAuth pairs
 from `.env.production`. Required repo secrets: `CLOUDFLARE_API_TOKEN`,
-`TMX_GITHUB_CLIENT_ID`, `TMX_GITHUB_CLIENT_SECRET`.
+`TMX_GITHUB_CLIENT_ID`, `TMX_GITHUB_CLIENT_SECRET`,
+`TMX_GOOGLE_CLIENT_ID`, `TMX_GOOGLE_CLIENT_SECRET`.
 
 ## CLI Releases
 

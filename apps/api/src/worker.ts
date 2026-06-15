@@ -12,6 +12,7 @@ import { CliLoginService, makeCliLoginService } from "./clilogin/service";
 import { AppConfig } from "./config";
 import { Drizzle } from "./database";
 import { GitHubClient, makeGitHubClient } from "./github/client";
+import { GoogleClient, makeGoogleClient } from "./google/client";
 import { LeaderboardRepositoryLive } from "./leaderboard/d1";
 import { LeaderboardService, makeLeaderboardService } from "./leaderboard/service";
 import { makeProfilesService, ProfilesService } from "./profiles/service";
@@ -65,6 +66,10 @@ const ApiWorker = Cloudflare.Worker(
       Effect.provide(FetchHttpClient.layer),
       Effect.provideService(AppConfig, config),
     );
+    const google = yield* makeGoogleClient().pipe(
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provideService(AppConfig, config),
+    );
     const usage = yield* makeUsageService().pipe(
       Effect.provide(UsageRepositoryLive.pipe(Layer.provide(drizzleLayer))),
     );
@@ -83,6 +88,7 @@ const ApiWorker = Cloudflare.Worker(
       Context.add(AuthService, auth),
       Context.add(CliLoginService, cliLogin),
       Context.add(GitHubClient, github),
+      Context.add(GoogleClient, google),
       Context.add(LeaderboardService, leaderboard),
       Context.add(ProfilesService, profiles),
       Context.add(TokensService, tokens),

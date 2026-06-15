@@ -18,7 +18,7 @@ import type { Authorization, CliAuth } from "@tokenmaxxing/api-contract";
 
 import { AppConfig } from "../config";
 import { cookieScopeFor } from "../auth/cookies";
-import type { AuthService } from "../auth/service";
+import { AuthService } from "../auth/service";
 import { CliLoginService } from "../clilogin/service";
 import type { Drizzle } from "../database";
 import { LeaderboardService } from "../leaderboard/service";
@@ -52,6 +52,13 @@ const meHandlers = HttpApiBuilder.group(TokenmaxxingApi, "me", (handlers) =>
       Effect.gen(function* () {
         const user = yield* CurrentUser;
         return { user };
+      }),
+    )
+    .handle("listAccounts", () =>
+      Effect.gen(function* () {
+        const user = yield* CurrentUser;
+        const auth = yield* AuthService;
+        return { accounts: yield* auth.listAccounts(user.id).pipe(Effect.orDie) };
       }),
     )
     .handle("approveCliLogin", ({ payload }) =>
