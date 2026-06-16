@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   ApiClientService,
   BrowserService,
+  BrowserOpenError,
   ClockService,
   type CliConfig,
   ConfigService,
@@ -12,9 +13,12 @@ import {
   TerminalService,
   type TokenmaxxingApiClient,
 } from "../services";
+import { browserLoginEffect } from "./login";
 import { formatSyncUsd, resolveSyncAuth } from "./sync";
 
 interface TestLayerOptions {
+  browserOpenError?: BrowserOpenError;
+  canOpenExternalBrowser?: boolean;
   envTokenActive?: boolean;
   initialConfig: CliConfig;
   interactive?: boolean;
@@ -77,10 +81,12 @@ function makeTestLayer(options: TestLayerOptions) {
       },
     }),
     Layer.succeed(BrowserService)({
-      open: (url) =>
-        Effect.sync(() => {
-          state.browserUrls.push(url);
-        }),
+      open: (url) => {
+        state.browserUrls.push(url);
+        return options.browserOpenError === undefined
+          ? Effect.succeed(undefined)
+          : Effect.fail(options.browserOpenError);
+      },
     }),
     Layer.succeed(ClockService)({
       sleep: () => Effect.succeed(undefined),
@@ -119,6 +125,7 @@ function makeTestLayer(options: TestLayerOptions) {
       },
     }),
     Layer.succeed(TerminalService)({
+      canOpenExternalBrowser: Effect.succeed(options.canOpenExternalBrowser ?? true),
       isInteractive: Effect.succeed(options.interactive ?? true),
     }),
   );
@@ -183,7 +190,47 @@ describe("resolveSyncAuth", () => {
       { baseUrl: "https://api.tokenmaxxing.example" },
       { baseUrl: "https://api.tokenmaxxing.example", token: "tmx_new" },
     ]);
-    expect(state.logs).toContain("Not logged in; opening browser login.");
+    expect(state.logs).toContain("Not logged in; starting browser login.");
+  });
+
+  it("skips external browser launch in interactive headless shells and completes manual login", async () => {
+    const { layer, state } = makeTestLayer({
+      canOpenExternalBrowser: false,
+      initialConfig: {
+        apiUrl: "https://api.tokenmaxxing.example",
+        wwwUrl: "https://tokenmaxxing.example",
+      },
+    });
+
+    const exit = await Effect.runPromiseExit(
+      resolveSyncAuth({ json: false }).pipe(Effect.provide(layer)),
+    );
+
+    expect(exit._tag).toBe("Success");
+    expect(state.browserUrls).toEqual([]);
+    expect(state.errors).toContain("Open the URL above in your browser to continue.");
+    expect(state.writtenTokens).toEqual(["tmx_new"]);
+  });
+
+  it("continues human login when automatic browser launch fails", async () => {
+    const { layer, state } = makeTestLayer({
+      browserOpenError: new BrowserOpenError({ cause: "xdg-open missing" }),
+      initialConfig: {
+        apiUrl: "https://api.tokenmaxxing.example",
+        wwwUrl: "https://tokenmaxxing.example",
+      },
+    });
+
+    const exit = await Effect.runPromiseExit(
+      resolveSyncAuth({ json: false }).pipe(Effect.provide(layer)),
+    );
+
+    expect(exit._tag).toBe("Success");
+    expect(state.browserUrls).toEqual(["https://tokenmaxxing.example/login/cli?code=ABC123"]);
+    expect(state.errors).toContain(
+      "Could not open a browser automatically; open the URL above manually.",
+    );
+    expect(state.writtenTokens).toEqual(["tmx_new"]);
   });
 
   it("clears a revoked stored token and restarts browser login for human sync", async () => {
@@ -234,6 +281,27 @@ describe("resolveSyncAuth", () => {
     expect(exit._tag).toBe("Failure");
     expect(state.browserUrls).toEqual([]);
     expect(state.clearedTokens).toBe(0);
+    expect(state.writtenTokens).toEqual([]);
+  });
+});
+
+describe("browserLoginEffect", () => {
+  it("keeps --json login from starting when external browser launch is unavailable", async () => {
+    const { layer, state } = makeTestLayer({
+      canOpenExternalBrowser: false,
+      initialConfig: {
+        apiUrl: "https://api.tokenmaxxing.example",
+        wwwUrl: "https://tokenmaxxing.example",
+      },
+    });
+
+    const exit = await Effect.runPromiseExit(
+      browserLoginEffect({ json: true }).pipe(Effect.provide(layer)),
+    );
+
+    expect(exit._tag).toBe("Failure");
+    expect(state.browserUrls).toEqual([]);
+    expect(state.madeClients).toEqual([]);
     expect(state.writtenTokens).toEqual([]);
   });
 });

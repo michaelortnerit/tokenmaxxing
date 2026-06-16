@@ -8,7 +8,7 @@ import { ConsoleLive } from "./console";
 import { TerminalLive } from "./terminal";
 
 export { ApiClientLive, ApiClientService, type TokenmaxxingApiClient } from "./api-client";
-export { BrowserLive, BrowserService } from "./browser";
+export { BrowserLive, BrowserOpenError, BrowserService } from "./browser";
 export { ClockLive, ClockService } from "./clock";
 export {
   ConfigLive,

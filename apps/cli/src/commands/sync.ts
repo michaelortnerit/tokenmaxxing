@@ -192,7 +192,7 @@ function resolveSyncAuth(options: ResolveSyncAuthOptions) {
         return yield* Effect.fail(new NotLoggedInError());
       }
 
-      yield* Effect.sync(() => output.log("Not logged in; opening browser login."));
+      yield* Effect.sync(() => output.log("Not logged in; starting browser login."));
       return yield* loginForSync();
     }
 
@@ -215,7 +215,9 @@ function resolveSyncAuth(options: ResolveSyncAuthOptions) {
     }
 
     yield* config.clearToken();
-    yield* Effect.sync(() => output.log("Stored token is no longer valid; opening browser login."));
+    yield* Effect.sync(() =>
+      output.log("Stored token is no longer valid; starting browser login."),
+    );
     return yield* loginForSync();
   });
 }

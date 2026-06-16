@@ -29,7 +29,8 @@ class PollCliLoginError extends Data.TaggedError("PollCliLoginError")<{
 class OpenBrowserError extends Data.TaggedError("OpenBrowserError")<{
   readonly cause: unknown;
 }> {
-  override message = "error: failed to open browser\nhint: open the login URL printed above";
+  override message =
+    "error: failed to open browser\nhint: run tokenmaxxing login without --json to approve manually, or set TOKENMAXXING_API_TOKEN";
 }
 
 class WriteCliTokenError extends Data.TaggedError("WriteCliTokenError")<{
@@ -120,6 +121,12 @@ function browserLoginEffect(options: BrowserLoginOptions) {
     if (!(yield* terminal.isInteractive)) {
       return yield* Effect.fail(new NonInteractiveLoginError());
     }
+    const canOpenBrowser = yield* terminal.canOpenExternalBrowser;
+    if (options.json && !canOpenBrowser) {
+      return yield* Effect.fail(
+        new OpenBrowserError({ cause: "External browser launch is unavailable." }),
+      );
+    }
 
     const deviceId = yield* config.ensureDeviceId();
     const client = yield* clients.make({ baseUrl: stored.apiUrl });
@@ -138,9 +145,25 @@ function browserLoginEffect(options: BrowserLoginOptions) {
       output.log(`Opening ${start.verificationUri}`);
       output.log(`Code: ${start.code}`);
     });
-    yield* browser
-      .open(start.verificationUri)
-      .pipe(Effect.mapError((cause) => new OpenBrowserError({ cause })));
+    if (canOpenBrowser) {
+      const openResult = yield* browser.open(start.verificationUri).pipe(
+        Effect.match({
+          onFailure: (cause) => ({ _tag: "failure" as const, cause }),
+          onSuccess: () => ({ _tag: "success" as const }),
+        }),
+      );
+      if (openResult._tag === "failure") {
+        if (options.json) {
+          return yield* Effect.fail(new OpenBrowserError({ cause: openResult.cause }));
+        }
+
+        yield* Effect.sync(() =>
+          output.error("Could not open a browser automatically; open the URL above manually."),
+        );
+      }
+    } else {
+      yield* Effect.sync(() => output.error("Open the URL above in your browser to continue."));
+    }
 
     for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt += 1) {
       const poll = yield* client.cliLogin
