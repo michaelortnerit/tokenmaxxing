@@ -1,10 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useRouter } from "@tanstack/react-router";
+import { Gear, SignOut, User } from "@phosphor-icons/react/ssr";
 
 import { signOut } from "../lib/api";
 import { meQueryOptions } from "../lib/queries";
 import { Avatar } from "./ui/avatar";
-import { Button, buttonClassName } from "./ui/button";
+import { buttonClassName } from "./ui/button";
+import { Menu } from "./ui/menu";
 
 function Nav() {
   return (
@@ -60,17 +62,27 @@ function UserMenu() {
   const user = me.data.user;
 
   return (
-    <div className="flex items-center gap-3">
-      <Link className="flex items-center gap-2" params={{ user: user.login }} to="/$user">
+    <Menu>
+      <Menu.Trigger className="flex rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent">
         <Avatar alt={user.login} size={28} src={user.avatarUrl} />
-      </Link>
-      <Link className="text-sm text-muted-foreground hover:text-foreground" to="/settings">
-        Settings
-      </Link>
-      <Button onClick={() => signout.mutate()} variant="ghost">
-        Sign out
-      </Button>
-    </div>
+      </Menu.Trigger>
+      <Menu.Content>
+        <Menu.Item icon={<User />} render={<Link params={{ user: user.login }} to="/$user" />}>
+          Profile
+        </Menu.Item>
+        <Menu.Item icon={<Gear />} render={<Link to="/settings" />}>
+          Settings
+        </Menu.Item>
+        <Menu.Separator />
+        <Menu.Item
+          className="text-red-500 data-[highlighted]:bg-red-500/10 data-[highlighted]:text-red-500"
+          icon={<SignOut />}
+          onClick={() => signout.mutate()}
+        >
+          Sign out
+        </Menu.Item>
+      </Menu.Content>
+    </Menu>
   );
 }
 

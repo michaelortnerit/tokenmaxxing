@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { Copy, PencilSimple, Trash } from "@phosphor-icons/react/ssr";
 
 import { StatCard } from "../components/stat-card";
 import { Avatar } from "../components/ui/avatar";
 import { Badge } from "../components/ui/badge";
-import { Button } from "../components/ui/button";
+import { Button, buttonClassName } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Code } from "../components/ui/code";
 import { Input, Textarea } from "../components/ui/input";
+import { Menu } from "../components/ui/menu";
 import { Tabs } from "../components/ui/tabs";
 
 const Route = createFileRoute("/design")({
@@ -127,6 +129,28 @@ function DesignPage() {
         <Tabs onChange={setTab} options={DEMO_TABS} value={tab} />
         <p className="mt-2 text-sm text-muted-foreground">
           Selected: <Code>{tab}</Code>
+        </p>
+      </Section>
+
+      <Section title="Menu">
+        <Menu>
+          <Menu.Trigger className={buttonClassName({ size: "sm", variant: "primary" })}>
+            Actions
+          </Menu.Trigger>
+          <Menu.Content align="start">
+            <Menu.Item icon={<PencilSimple />}>Edit profile</Menu.Item>
+            <Menu.Item icon={<Copy />}>Copy link</Menu.Item>
+            <Menu.Separator />
+            <Menu.Item
+              className="text-red-500 data-[highlighted]:bg-red-500/10 data-[highlighted]:text-red-500"
+              icon={<Trash />}
+            >
+              Delete
+            </Menu.Item>
+          </Menu.Content>
+        </Menu>
+        <p className="mt-2 text-sm text-muted-foreground">
+          A Base UI dropdown — arrow keys move the highlight, Esc or an outside click closes it.
         </p>
       </Section>
 
