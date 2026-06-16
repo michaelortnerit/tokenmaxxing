@@ -18,7 +18,7 @@ interface HeatmapProps {
 
 interface HoveredCell {
   day: string;
-  /** Pixel position of the cell within the scroll content. */
+  /** Pixel position of the cell within the rendered chart container. */
   left: number;
   top: number;
   value: number;
@@ -30,7 +30,7 @@ const LEFT = 28;
 const TOP = 16;
 
 function Heatmap({ accent, byDate, first, last }: HeatmapProps) {
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const [hovered, setHovered] = useState<HoveredCell | null>(null);
 
   const { cells, max, monthLabels, weeks } = useMemo(() => {
@@ -76,8 +76,8 @@ function Heatmap({ accent, byDate, first, last }: HeatmapProps) {
   const height = TOP + 7 * (CELL + GAP);
 
   return (
-    <div className="relative">
-      <div className="overflow-x-auto" ref={scrollRef}>
+    <div className="relative" ref={rootRef}>
+      <div className="overflow-x-auto">
         <svg
           aria-label={`Daily spend heatmap from ${formatDay(first)} to ${formatDay(last)}`}
           className="block h-auto w-full"
@@ -125,14 +125,19 @@ function Heatmap({ accent, byDate, first, last }: HeatmapProps) {
                   fill={level === 0 ? "currentColor" : accent}
                   height={CELL}
                   key={day}
-                  onPointerEnter={() =>
+                  onPointerEnter={(event) => {
+                    const rootRect = rootRef.current?.getBoundingClientRect();
+                    if (rootRect === undefined) {
+                      return;
+                    }
+                    const cellRect = event.currentTarget.getBoundingClientRect();
                     setHovered({
                       day,
-                      left: cx + CELL / 2 - (scrollRef.current?.scrollLeft ?? 0),
-                      top: cy,
+                      left: cellRect.left - rootRect.left + cellRect.width / 2,
+                      top: cellRect.top - rootRect.top,
                       value,
-                    })
-                  }
+                    });
+                  }}
                   opacity={level === 0 ? 0.08 : opacities[level]}
                   width={CELL}
                   x={cx}

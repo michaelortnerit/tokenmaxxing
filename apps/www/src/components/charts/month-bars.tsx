@@ -11,8 +11,8 @@ interface MonthPoint {
   value: number;
 }
 
-const WIDTH = 460;
-const HEIGHT = 170;
+const WIDTH = 940;
+const HEIGHT = 220;
 const TICKS = 4;
 const AXIS = 44;
 
@@ -62,29 +62,34 @@ function MonthBars({ accent, months }: { accent: string; months: MonthPoint[] })
         })}
         {months.map((point, index) => {
           const height = y(point.value);
+          const hasValue = point.value > 0;
           const x = AXIS + slot * index + (slot - barWidth) / 2;
           return (
             <g key={point.month} onPointerEnter={() => setHovered(index)}>
               {/* Invisible hover target spanning the full column height. */}
               <rect fill="transparent" height={HEIGHT} width={slot} x={AXIS + slot * index} y={0} />
-              <rect
-                fill={accent}
-                height={Math.max(height, 1)}
-                opacity={hovered === null || hovered === index ? 1 : 0.45}
-                width={barWidth}
-                x={x}
-                y={HEIGHT - height}
-              />
-              <text
-                className="fill-current"
-                fontSize={10}
-                fontWeight={600}
-                textAnchor="middle"
-                x={x + barWidth / 2}
-                y={HEIGHT - height - 6}
-              >
-                {formatUsd(point.value)}
-              </text>
+              {hasValue ? (
+                <>
+                  <rect
+                    fill={accent}
+                    height={height}
+                    opacity={hovered === null || hovered === index ? 1 : 0.45}
+                    width={barWidth}
+                    x={x}
+                    y={HEIGHT - height}
+                  />
+                  <text
+                    className="fill-current text-muted-foreground"
+                    fontSize={10}
+                    fontWeight={500}
+                    textAnchor="middle"
+                    x={x + barWidth / 2}
+                    y={HEIGHT - height - 6}
+                  >
+                    {formatUsd(point.value)}
+                  </text>
+                </>
+              ) : null}
               <text
                 className="fill-current opacity-45"
                 fontSize={10}

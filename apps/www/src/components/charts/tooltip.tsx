@@ -20,8 +20,7 @@ const CARD_REM = 14;
 /**
  * Left offset (a CSS string) that centres a tooltip on the point at `fraction`
  * (0–1) across the chart, clamped so the card never spills past either edge of
- * its relative container. Width-agnostic, so the full-width daily chart and the
- * half-width cumulative/monthly charts all stay on-screen.
+ * its relative container.
  */
 function anchorLeft(fraction: number): string {
   const pct = Math.min(Math.max(fraction, 0), 1) * 100;

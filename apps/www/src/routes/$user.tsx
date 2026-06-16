@@ -5,7 +5,6 @@ import type { ProfileDailyRow } from "@tokenmaxxing/api-contract";
 
 type DailyRow = typeof ProfileDailyRow.Type;
 
-import { AreaChart } from "../components/charts/area-chart";
 import { Heatmap } from "../components/charts/heatmap";
 import { MonthBars } from "../components/charts/month-bars";
 import {
@@ -28,7 +27,6 @@ const Route = createFileRoute("/$user")({
 
 /** The daily-bars chart stays readable up to roughly this many days. */
 const DAILY_WINDOW = 184;
-const HEATMAP_WINDOW = 365;
 
 const countFormatter = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 
@@ -121,21 +119,6 @@ function ProfileDashboard({ rows, stats }: { rows: readonly DailyRow[]; stats: D
         </div>
       </section>
 
-      <div className="grid grid-cols-1 gap-px bg-border lg:grid-cols-2">
-        <section className="bg-card p-5">
-          <h2 className="font-medium">Cumulative spend</h2>
-          <div className="mt-4">
-            <AreaChart accent={derived.accent} points={derived.cumulative} />
-          </div>
-        </section>
-        <section className="bg-card p-5">
-          <h2 className="font-medium">Monthly spend</h2>
-          <div className="mt-4">
-            <MonthBars accent={derived.accent} months={derived.months} />
-          </div>
-        </section>
-      </div>
-
       <section className="bg-card p-5">
         <h2 className="font-medium">Activity heatmap</h2>
         <div className="mt-4">
@@ -147,6 +130,13 @@ function ProfileDashboard({ rows, stats }: { rows: readonly DailyRow[]; stats: D
               last={derived.heatmap.last}
             />
           ) : null}
+        </div>
+      </section>
+
+      <section className="bg-card p-5">
+        <h2 className="font-medium">Monthly spend</h2>
+        <div className="mt-4">
+          <MonthBars accent={derived.accent} months={derived.months} />
         </div>
       </section>
     </div>
@@ -173,7 +163,13 @@ function deriveCharts(rows: readonly DailyRow[]) {
   const first = rows[0]?.date ?? null;
   const last = rows.at(-1)?.date ?? null;
   const allDays = first !== null && last !== null ? enumerateDays(first, last) : [];
-  const heatmapFirst = last !== null ? addDaysKey(last, -(HEATMAP_WINDOW - 1)) : null;
+  const heatmapRange =
+    last !== null
+      ? {
+          first: `${last.slice(0, 4)}-01-01`,
+          last: `${last.slice(0, 4)}-12-31`,
+        }
+      : null;
 
   const familyOrder = [...colors.keys()];
   const stackedDays: StackedDay[] = allDays.slice(-DAILY_WINDOW).map((date) => {
@@ -189,25 +185,22 @@ function deriveCharts(rows: readonly DailyRow[]) {
     };
   });
 
-  let running = 0;
-  const cumulative = allDays.map((date) => {
-    running += spendByDate.get(date) ?? 0;
-    return { date, value: running };
-  });
-
   const byMonth = new Map<string, number>();
   for (const [date, value] of spendByDate) {
     const month = date.slice(0, 7);
     byMonth.set(month, (byMonth.get(month) ?? 0) + value);
   }
-  const months = [...byMonth.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([month, value]) => ({ month, value }));
+  const months =
+    last !== null
+      ? enumerateCalendarYearMonths(last.slice(0, 4)).map((month) => ({
+          month,
+          value: byMonth.get(month) ?? 0,
+        }))
+      : [];
 
   return {
     accent,
-    cumulative,
-    heatmap: heatmapFirst !== null && last !== null ? { first: heatmapFirst, last } : null,
+    heatmap: heatmapRange,
     legend: familyOrder.map((family) => ({ color: colors.get(family) ?? "#9ca3af", family })),
     months,
     outputTokens,
@@ -216,12 +209,8 @@ function deriveCharts(rows: readonly DailyRow[]) {
   };
 }
 
-function addDaysKey(date: string, days: number): string {
-  const [year, month, day] = date.split("-").map(Number);
-  const result = new Date(Date.UTC(year ?? 0, (month ?? 1) - 1, day ?? 1));
-  result.setUTCDate(result.getUTCDate() + days);
-
-  return result.toISOString().slice(0, 10);
+function enumerateCalendarYearMonths(year: string): string[] {
+  return Array.from({ length: 12 }, (_, index) => `${year}-${String(index + 1).padStart(2, "0")}`);
 }
 
 export { Route };
