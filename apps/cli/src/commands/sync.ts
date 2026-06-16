@@ -9,9 +9,11 @@ import { runCcusageSource } from "../ccusage/runner";
 import { DEFAULT_SOURCE_NAMES, resolveSources } from "../ccusage/sources";
 import {
   ApiClientService,
+  BrowserService,
   type CliConfig,
   ConfigService,
   ConsoleService,
+  TerminalService,
   type TokenmaxxingApiClient,
 } from "../services";
 import { browserLoginEffect } from "./login";
@@ -174,6 +176,34 @@ function syncEffect(options: SyncOptions) {
         output.log(`Synced ${rows.length} rows -> ${profileUrl}`);
       }
     });
+    if (!options.json) {
+      yield* openProfileIfAvailable(`${auth.config.wwwUrl}/${auth.user.login}`);
+    }
+  });
+}
+
+function openProfileIfAvailable(profileUrl: string) {
+  return Effect.gen(function* () {
+    const browser = yield* Effect.service(BrowserService);
+    const console = yield* Effect.service(ConsoleService);
+    const terminal = yield* Effect.service(TerminalService);
+
+    if (!(yield* terminal.canOpenExternalBrowser)) {
+      return;
+    }
+
+    const opened = yield* browser.open(profileUrl).pipe(
+      Effect.match({
+        onFailure: () => false,
+        onSuccess: () => true,
+      }),
+    );
+
+    if (!opened) {
+      yield* Effect.sync(() =>
+        console.error("Could not open profile automatically; open the URL above manually."),
+      );
+    }
   });
 }
 
@@ -252,6 +282,7 @@ function formatSyncUsd(value: number): string {
 
 export {
   formatSyncUsd,
+  openProfileIfAvailable,
   resolveSyncAuth,
   syncCommand,
   syncEffect,

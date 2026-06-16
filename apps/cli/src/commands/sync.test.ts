@@ -14,7 +14,7 @@ import {
   type TokenmaxxingApiClient,
 } from "../services";
 import { browserLoginEffect } from "./login";
-import { formatSyncUsd, resolveSyncAuth } from "./sync";
+import { formatSyncUsd, openProfileIfAvailable, resolveSyncAuth } from "./sync";
 
 interface TestLayerOptions {
   browserOpenError?: BrowserOpenError;
@@ -303,5 +303,59 @@ describe("browserLoginEffect", () => {
     expect(state.browserUrls).toEqual([]);
     expect(state.madeClients).toEqual([]);
     expect(state.writtenTokens).toEqual([]);
+  });
+});
+
+describe("openProfileIfAvailable", () => {
+  it("opens the profile URL when an external browser is available", async () => {
+    const { layer, state } = makeTestLayer({
+      initialConfig: {
+        apiUrl: "https://api.tokenmaxxing.example",
+        wwwUrl: "https://tokenmaxxing.example",
+      },
+    });
+
+    await Effect.runPromise(
+      openProfileIfAvailable("https://tokenmaxxing.example/alex").pipe(Effect.provide(layer)),
+    );
+
+    expect(state.browserUrls).toEqual(["https://tokenmaxxing.example/alex"]);
+    expect(state.errors).toEqual([]);
+  });
+
+  it("skips profile opening when no external browser is available", async () => {
+    const { layer, state } = makeTestLayer({
+      canOpenExternalBrowser: false,
+      initialConfig: {
+        apiUrl: "https://api.tokenmaxxing.example",
+        wwwUrl: "https://tokenmaxxing.example",
+      },
+    });
+
+    await Effect.runPromise(
+      openProfileIfAvailable("https://tokenmaxxing.example/alex").pipe(Effect.provide(layer)),
+    );
+
+    expect(state.browserUrls).toEqual([]);
+    expect(state.errors).toEqual([]);
+  });
+
+  it("keeps sync successful when profile opening fails", async () => {
+    const { layer, state } = makeTestLayer({
+      browserOpenError: new BrowserOpenError({ cause: "xdg-open missing" }),
+      initialConfig: {
+        apiUrl: "https://api.tokenmaxxing.example",
+        wwwUrl: "https://tokenmaxxing.example",
+      },
+    });
+
+    await Effect.runPromise(
+      openProfileIfAvailable("https://tokenmaxxing.example/alex").pipe(Effect.provide(layer)),
+    );
+
+    expect(state.browserUrls).toEqual(["https://tokenmaxxing.example/alex"]);
+    expect(state.errors).toContain(
+      "Could not open profile automatically; open the URL above manually.",
+    );
   });
 });
