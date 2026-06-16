@@ -119,7 +119,7 @@ function ConnectedAccountsSection() {
       <p className="mt-1 text-sm text-muted-foreground">
         Sign in with any connected provider to reach the same profile.
       </p>
-      <div className="mt-4 overflow-hidden border border-border">
+      <div className="-mx-4 mt-4 overflow-hidden border-y border-border">
         {accounts.isPending ? (
           <p className="p-4 text-sm text-muted-foreground">Loading…</p>
         ) : accounts.isError ? (
@@ -197,7 +197,7 @@ function DevicesSection({ login }: { login: string }) {
           {errorMessage(deleteDevice.error, "Delete failed; refresh and try again.")}
         </p>
       ) : null}
-      <div className="mt-4 overflow-hidden border border-border">
+      <div className="-mx-4 mt-4 overflow-hidden border-y border-border">
         {devices.isPending ? (
           <p className="p-4 text-sm text-muted-foreground">Loading…</p>
         ) : devices.isError || devices.data.devices.length === 0 ? (
@@ -258,7 +258,7 @@ function TokensSection() {
           {errorMessage(revoke.error, "Revoke failed; refresh and try again.")}
         </p>
       ) : null}
-      <div className="mt-4 overflow-hidden border border-border">
+      <div className="-mx-4 mt-4 overflow-hidden border-y border-border">
         {tokens.isPending ? (
           <p className="p-4 text-sm text-muted-foreground">Loading…</p>
         ) : tokens.isError || tokens.data.tokens.length === 0 ? (

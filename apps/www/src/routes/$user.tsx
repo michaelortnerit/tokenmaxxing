@@ -94,7 +94,7 @@ function ProfileDashboard({ rows, stats }: { rows: readonly DailyRow[]; stats: D
   const derived = useMemo(() => deriveCharts(rows), [rows]);
 
   return (
-    <div className="grid grid-cols-1 gap-px border border-border bg-border">
+    <div className="-mx-4 grid grid-cols-1 gap-px border-y border-border bg-border">
       <div className="grid grid-cols-2 gap-px bg-border md:grid-cols-4">
         <StatCard label="Total spend" value={formatUsd(stats.totalSpendUsd)} />
         <StatCard label="Total tokens" value={formatTokens(stats.totalTokens)} />

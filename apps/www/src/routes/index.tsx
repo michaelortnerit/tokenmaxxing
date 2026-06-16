@@ -61,7 +61,7 @@ function LeaderboardPage() {
         </div>
       </div>
 
-      <div className="mt-6 overflow-hidden border border-border">
+      <div className="-mx-4 mt-6 overflow-hidden border-y border-border">
         {leaderboard.isPending ? (
           <p className="p-6 text-sm text-muted-foreground">Loading the rankings…</p>
         ) : leaderboard.isError ? (
