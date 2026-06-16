@@ -1,6 +1,7 @@
 import { createRootRouteWithContext, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import type { QueryClient } from "@tanstack/react-query";
 
+import { Footer } from "../components/footer";
 import { Nav } from "../components/nav";
 import styles from "../styles.css?url";
 
@@ -42,6 +43,7 @@ function RootDocument() {
         <Nav />
         <main className="mx-4 min-h-screen max-w-5xl border-x border-border px-4 pb-16 pt-10 lg:mx-auto">
           <Outlet />
+          <Footer />
         </main>
         <Scripts />
       </body>
