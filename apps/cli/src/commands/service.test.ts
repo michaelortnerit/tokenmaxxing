@@ -2,8 +2,20 @@ import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 
+import { Cause, Effect, Layer } from "effect";
+import type { AuthUser } from "@tokenmaxxing/api-contract";
 import { describe, expect, it } from "vitest";
 
+import {
+  ApiClientService,
+  BrowserService,
+  ClockService,
+  type CliConfig,
+  ConfigService,
+  ConsoleService,
+  TerminalService,
+  type TokenmaxxingApiClient,
+} from "../services";
 import {
   autoUpdateCommandDescription,
   backendForPlatform,
@@ -17,10 +29,177 @@ import {
   renderServiceWrapper,
   renderSystemdTimer,
   scheduleDescription,
+  serviceInstallProgram,
   serviceLockStatus,
+  type ServiceMetadata,
+  type ServicePaths,
   servicePaths,
   shouldSkipServiceRun,
 } from "./service";
+
+interface TestLayerOptions {
+  envTokenActive?: boolean;
+  initialConfig: CliConfig;
+  interactive?: boolean;
+  meError?: unknown;
+}
+
+interface TestState {
+  browserUrls: string[];
+  clearedTokens: number;
+  errors: string[];
+  logs: string[];
+  madeClients: Array<{ baseUrl: string; token?: string | undefined }>;
+  writtenTokens: string[];
+}
+
+const user: AuthUser = {
+  avatarUrl: null,
+  id: "user_123",
+  login: "alex",
+  name: null,
+};
+
+function makeTestLayer(options: TestLayerOptions) {
+  let currentConfig = options.initialConfig;
+  const state: TestState = {
+    browserUrls: [],
+    clearedTokens: 0,
+    errors: [],
+    logs: [],
+    madeClients: [],
+    writtenTokens: [],
+  };
+
+  const layer = Layer.mergeAll(
+    Layer.succeed(ApiClientService)({
+      make: (clientOptions) => {
+        state.madeClients.push(clientOptions);
+
+        return Effect.succeed({
+          cliLogin: {
+            poll: () => Effect.succeed({ status: "complete" as const, token: "tmx_new", user }),
+            start: () =>
+              Effect.succeed({
+                code: "ABC123",
+                expiresAt: "2026-06-13T20:00:00.000Z",
+                intervalSeconds: 0,
+                verificationUri: "https://tokenmaxxing.example/login/cli?code=ABC123",
+              }),
+          },
+          me: {
+            me: () =>
+              options.meError === undefined
+                ? Effect.succeed({ user })
+                : Effect.fail(options.meError),
+          },
+          usage: {
+            sync: () => Effect.succeed({ upserted: 0 }),
+          },
+        } as unknown as TokenmaxxingApiClient);
+      },
+    }),
+    Layer.succeed(BrowserService)({
+      open: (url) =>
+        Effect.sync(() => {
+          state.browserUrls.push(url);
+        }),
+    }),
+    Layer.succeed(ClockService)({
+      sleep: () => Effect.succeed(undefined),
+    }),
+    Layer.succeed(ConfigService)({
+      clearToken: () =>
+        Effect.sync(() => {
+          const token = currentConfig.token;
+          const { token: _token, ...nextConfig } = currentConfig;
+          currentConfig = nextConfig;
+          state.clearedTokens += 1;
+
+          return {
+            config: nextConfig,
+            token,
+            tokenCleared: token !== undefined,
+          };
+        }),
+      ensureDeviceId: () => Effect.succeed(currentConfig.deviceId ?? "device_123"),
+      hasEnvToken: () => Effect.succeed(options.envTokenActive ?? false),
+      readConfig: () => Effect.succeed(currentConfig),
+      writeToken: (token) =>
+        Effect.sync(() => {
+          currentConfig = { ...currentConfig, token };
+          state.writtenTokens.push(token);
+
+          return currentConfig;
+        }),
+    }),
+    Layer.succeed(ConsoleService)({
+      error: (message?: unknown) => {
+        state.errors.push(String(message));
+      },
+      log: (message?: unknown) => {
+        state.logs.push(String(message));
+      },
+    }),
+    Layer.succeed(TerminalService)({
+      canOpenExternalBrowser: Effect.succeed(true),
+      isInteractive: Effect.succeed(options.interactive ?? true),
+    }),
+  );
+
+  return { layer, state };
+}
+
+function makeInstallRuntime() {
+  const installed: ServicePaths[] = [];
+  const written: Array<{
+    metadata: ServiceMetadata;
+    paths: ServicePaths;
+    wrapper: string;
+  }> = [];
+
+  return {
+    installed,
+    runtime: {
+      env: {
+        PATH: "/usr/local/bin:/usr/bin",
+        TOKENMAXXING_CONFIG_DIR: "/tmp/tokenmaxxing",
+      },
+      findCommandInstall: () =>
+        Effect.succeed({
+          autoUpdateManager: "npm" as const,
+          commandPath: "/usr/local/bin/tokenmaxxing",
+          resolvedCommandPath: "/usr/local/lib/node_modules/@851-labs/tokenmaxxing/dist/index.js",
+        }),
+      home: "/Users/alex",
+      installScheduler: (paths: ServicePaths) =>
+        Effect.sync(() => {
+          installed.push(paths);
+        }),
+      now: new Date("2026-06-16T12:00:00.000Z"),
+      platform: "darwin" as const,
+      writeFiles: (paths: ServicePaths, wrapper: string, metadata: ServiceMetadata) =>
+        Effect.sync(() => {
+          written.push({ metadata, paths, wrapper });
+        }),
+    },
+    written,
+  };
+}
+
+function unauthorizedError() {
+  return Object.assign(new Error("unauthorized"), { _tag: "Unauthorized" as const });
+}
+
+function failureTag(exit: Awaited<ReturnType<typeof Effect.runPromiseExit>>): string | undefined {
+  if (exit._tag !== "Failure") {
+    return undefined;
+  }
+
+  const failure = exit.cause.reasons.find(Cause.isFailReason);
+
+  return failure === undefined ? undefined : (failure.error as { _tag?: string })._tag;
+}
 
 describe("backendForPlatform", () => {
   it("selects the native scheduler for supported platforms", () => {
@@ -210,6 +389,124 @@ describe("formatServiceStatusAutoUpdate", () => {
         version: 1,
       }),
     ).toBe("enabled via npm");
+  });
+});
+
+describe("serviceInstallProgram", () => {
+  it("starts browser login and installs the service when no stored token exists", async () => {
+    const { layer, state } = makeTestLayer({
+      initialConfig: {
+        apiUrl: "https://api.tokenmaxxing.example",
+        wwwUrl: "https://tokenmaxxing.example",
+      },
+    });
+    const { installed, runtime, written } = makeInstallRuntime();
+
+    const exit = await Effect.runPromiseExit(
+      serviceInstallProgram({ autoUpdate: true, force: false }, runtime).pipe(
+        Effect.provide(layer),
+      ),
+    );
+
+    expect(exit._tag).toBe("Success");
+    expect(state.logs).toContain("Not logged in; starting browser login.");
+    expect(state.browserUrls).toEqual(["https://tokenmaxxing.example/login/cli?code=ABC123"]);
+    expect(state.writtenTokens).toEqual(["tmx_new"]);
+    expect(state.madeClients).toEqual([
+      { baseUrl: "https://api.tokenmaxxing.example" },
+      { baseUrl: "https://api.tokenmaxxing.example", token: "tmx_new" },
+    ]);
+    expect(written).toHaveLength(1);
+    expect(installed).toEqual([written[0]?.paths]);
+    expect(written[0]?.metadata).toMatchObject({
+      autoUpdate: true,
+      autoUpdateManager: "npm",
+      commandPath: "/usr/local/bin/tokenmaxxing",
+      installedAt: "2026-06-16T12:00:00.000Z",
+    });
+    expect(state.logs).toContain("Automatic sync installed.");
+  });
+
+  it("relogs in and continues installing when the stored token is revoked", async () => {
+    const { layer, state } = makeTestLayer({
+      initialConfig: {
+        apiUrl: "https://api.tokenmaxxing.example",
+        token: "tmx_old",
+        wwwUrl: "https://tokenmaxxing.example",
+      },
+      meError: unauthorizedError(),
+    });
+    const { installed, runtime, written } = makeInstallRuntime();
+
+    const exit = await Effect.runPromiseExit(
+      serviceInstallProgram({ autoUpdate: false, force: false }, runtime).pipe(
+        Effect.provide(layer),
+      ),
+    );
+
+    expect(exit._tag).toBe("Success");
+    expect(state.clearedTokens).toBe(1);
+    expect(state.logs).toContain("Stored token is no longer valid; starting browser login.");
+    expect(state.browserUrls).toEqual(["https://tokenmaxxing.example/login/cli?code=ABC123"]);
+    expect(state.writtenTokens).toEqual(["tmx_new"]);
+    expect(state.madeClients).toEqual([
+      { baseUrl: "https://api.tokenmaxxing.example", token: "tmx_old" },
+      { baseUrl: "https://api.tokenmaxxing.example" },
+      { baseUrl: "https://api.tokenmaxxing.example", token: "tmx_new" },
+    ]);
+    expect(written).toHaveLength(1);
+    expect(installed).toEqual([written[0]?.paths]);
+    expect(written[0]?.metadata.autoUpdate).toBe(false);
+  });
+
+  it("still rejects TOKENMAXXING_API_TOKEN before starting login or installing", async () => {
+    const { layer, state } = makeTestLayer({
+      envTokenActive: true,
+      initialConfig: {
+        apiUrl: "https://api.tokenmaxxing.example",
+        token: "tmx_env",
+        wwwUrl: "https://tokenmaxxing.example",
+      },
+    });
+    const { installed, runtime, written } = makeInstallRuntime();
+
+    const exit = await Effect.runPromiseExit(
+      serviceInstallProgram({ autoUpdate: true, force: false }, runtime).pipe(
+        Effect.provide(layer),
+      ),
+    );
+
+    expect(exit._tag).toBe("Failure");
+    expect(failureTag(exit)).toBe("ServiceEnvTokenError");
+    expect(state.browserUrls).toEqual([]);
+    expect(state.writtenTokens).toEqual([]);
+    expect(written).toEqual([]);
+    expect(installed).toEqual([]);
+  });
+
+  it("does not install when login cannot run in a non-interactive shell", async () => {
+    const { layer, state } = makeTestLayer({
+      initialConfig: {
+        apiUrl: "https://api.tokenmaxxing.example",
+        wwwUrl: "https://tokenmaxxing.example",
+      },
+      interactive: false,
+    });
+    const { installed, runtime, written } = makeInstallRuntime();
+
+    const exit = await Effect.runPromiseExit(
+      serviceInstallProgram({ autoUpdate: true, force: false }, runtime).pipe(
+        Effect.provide(layer),
+      ),
+    );
+
+    expect(exit._tag).toBe("Failure");
+    expect(failureTag(exit)).toBe("NonInteractiveLoginError");
+    expect(state.logs).toContain("Not logged in; starting browser login.");
+    expect(state.browserUrls).toEqual([]);
+    expect(state.writtenTokens).toEqual([]);
+    expect(written).toEqual([]);
+    expect(installed).toEqual([]);
   });
 });
 

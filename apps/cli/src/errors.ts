@@ -25,7 +25,6 @@ const userFacingErrorTags = new Set([
   "ServiceEphemeralCommandError",
   "ServiceInstallError",
   "ServiceNotInstalledError",
-  "ServiceNotLoggedInError",
   "ServiceRunError",
   "ServiceUninstallError",
   "ServiceUnsupportedPlatformError",

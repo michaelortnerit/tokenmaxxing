@@ -138,11 +138,6 @@ class ServiceEnvTokenError extends Data.TaggedError("ServiceEnvTokenError")<{}> 
     "error: service install needs a stored login, not TOKENMAXXING_API_TOKEN\nhint: unset TOKENMAXXING_API_TOKEN, run tokenmaxxing login, then run tokenmaxxing service install";
 }
 
-class ServiceNotLoggedInError extends Data.TaggedError("ServiceNotLoggedInError")<{}> {
-  override message =
-    "error: service install needs a stored login\nhint: run tokenmaxxing login first";
-}
-
 class ServiceCommandNotFoundError extends Data.TaggedError("ServiceCommandNotFoundError")<{}> {
   override message =
     "error: tokenmaxxing is not installed globally\nhint: install it with bun, npm, pnpm, or yarn, then run tokenmaxxing service install";
@@ -239,6 +234,25 @@ const serviceCommand = Command.make("service").pipe(
 );
 
 function serviceInstallEffect(options: ServiceInstallOptions) {
+  return serviceInstallProgram(options);
+}
+
+function serviceInstallProgram(
+  options: ServiceInstallOptions,
+  runtime: {
+    env?: Record<string, string | undefined>;
+    findCommandInstall?: () => Effect.Effect<CommandInstall | null, unknown>;
+    home?: string;
+    installScheduler?: (paths: ServicePaths) => Effect.Effect<void, unknown>;
+    now?: Date;
+    platform?: NodeJS.Platform;
+    writeFiles?: (
+      paths: ServicePaths,
+      wrapper: string,
+      metadata: ServiceMetadata,
+    ) => Effect.Effect<void, unknown>;
+  } = {},
+) {
   return Effect.gen(function* () {
     const config = yield* Effect.service(ConfigService);
     const console = yield* Effect.service(ConsoleService);
@@ -247,16 +261,14 @@ function serviceInstallEffect(options: ServiceInstallOptions) {
       return yield* Effect.fail(new ServiceEnvTokenError());
     }
 
-    const stored = yield* config.readConfig();
-    if (stored.token === undefined) {
-      return yield* Effect.fail(new ServiceNotLoggedInError());
-    }
-    yield* resolveSyncAuth({ json: true }).pipe(
-      Effect.mapError(() => new ServiceNotLoggedInError()),
-    );
+    yield* resolveSyncAuth({ json: false });
 
-    const paths = yield* servicePathsEffect();
-    const commandInstall = yield* findTokenmaxxingCommandInstall().pipe(
+    const env = runtime.env ?? process.env;
+    const platform = runtime.platform ?? process.platform;
+    const paths = yield* servicePathsEffect(env, runtime.home, platform);
+    const commandInstall = yield* (
+      runtime.findCommandInstall ?? (() => findTokenmaxxingCommandInstall(env, platform))
+    )().pipe(
       Effect.flatMap((install) =>
         install === null ? Effect.fail(new ServiceCommandNotFoundError()) : Effect.succeed(install),
       ),
@@ -274,12 +286,12 @@ function serviceInstallEffect(options: ServiceInstallOptions) {
       );
     }
 
-    const env = capturedServiceEnv();
+    const serviceEnv = capturedServiceEnv(env);
     const wrapper = renderServiceWrapper({
       commandPath,
-      env,
+      env: serviceEnv,
       logPath: paths.logPath,
-      platform: process.platform,
+      platform,
     });
     const metadata: ServiceMetadata = {
       autoUpdate: options.autoUpdate,
@@ -287,15 +299,15 @@ function serviceInstallEffect(options: ServiceInstallOptions) {
       backend: paths.backend,
       commandPath,
       resolvedCommandPath: commandInstall.resolvedCommandPath,
-      installedAt: new Date().toISOString(),
+      installedAt: (runtime.now ?? new Date()).toISOString(),
       schedule: scheduleDescription(),
       version: 1,
     };
 
-    yield* writeServiceFiles(paths, wrapper, metadata).pipe(
+    yield* (runtime.writeFiles ?? writeServiceFiles)(paths, wrapper, metadata).pipe(
       Effect.mapError((cause) => new ServiceInstallError({ cause })),
     );
-    yield* installNativeScheduler(paths).pipe(
+    yield* (runtime.installScheduler ?? installNativeScheduler)(paths).pipe(
       Effect.mapError((cause) => new ServiceInstallError({ cause })),
     );
 
@@ -1540,6 +1552,7 @@ export {
   serviceCommand,
   serviceDoctorEffect,
   serviceInstallEffect,
+  serviceInstallProgram,
   serviceLockStatus,
   servicePathsEffect,
   servicePaths,
@@ -1553,7 +1566,6 @@ export {
   ServiceEphemeralCommandError,
   ServiceInstallError,
   ServiceNotInstalledError,
-  ServiceNotLoggedInError,
   ServiceRunError,
   ServiceUninstallError,
   ServiceUnsupportedPlatformError,
