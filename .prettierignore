@@ -1,0 +1,3 @@
+.repos/
+**/routeTree.gen.ts
+packages/db/migrations/
