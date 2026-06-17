@@ -3,6 +3,7 @@ import { Command, Flag } from "effect/unstable/cli";
 
 import { ApiClientService, ConfigService } from "../services";
 import { humanFrame, humanSpinner, writeJson } from "../output";
+import { isUnauthorizedError } from "../auth-validation";
 
 class NotLoggedInError extends Data.TaggedError("NotLoggedInError")<{}> {
   override message = "error: not logged in\nhint: run tokenmaxxing login";
@@ -40,11 +41,7 @@ function whoamiEffect(options: { json: boolean }) {
       const spinner = yield* humanSpinner("Fetching account...", options);
       const me = yield* client.me.me().pipe(
         Effect.mapError((cause) =>
-          typeof cause === "object" &&
-          cause !== null &&
-          (cause as { _tag?: string })._tag === "Unauthorized"
-            ? new NotLoggedInError()
-            : new WhoamiError({ cause }),
+          isUnauthorizedError(cause) ? new NotLoggedInError() : new WhoamiError({ cause }),
         ),
         Effect.tapError(() => Effect.sync(() => spinner.error("Could not fetch account."))),
       );

@@ -12,7 +12,8 @@ import {
   ConfigService,
   TerminalService,
 } from "../services";
-import { formatUrl, humanFrame, humanLog, humanSpinner, writeJson } from "../output";
+import { formatUrl, humanFrame, humanLog, writeJson } from "../output";
+import { validateCurrentLogin } from "../auth-validation";
 
 class StartCliLoginError extends Data.TaggedError("StartCliLoginError")<{
   readonly cause: unknown;
@@ -121,21 +122,15 @@ function loginEffect(options: { json: boolean }) {
       const envTokenActive = yield* config.hasEnvToken();
       if (stored.token !== undefined) {
         const client = yield* clients.make({ baseUrl: stored.apiUrl, token: stored.token });
-        const spinner = yield* humanSpinner("Checking current login...", options);
-        const validated = yield* client.me.me().pipe(
-          Effect.map((me) => ({ _tag: "valid" as const, user: me.user })),
-          Effect.catch((cause) => Effect.succeed({ _tag: "invalid" as const, cause })),
-        );
+        const validated = yield* validateCurrentLogin(client, { ...options, showSpinner: true });
 
         if (validated._tag === "valid") {
-          yield* Effect.sync(() => spinner.stop("Validated current login."));
           return yield* Effect.fail(
             new AlreadyLoggedInError({ envTokenActive, login: validated.user.login }),
           );
         }
 
-        yield* Effect.sync(() => spinner.error("Could not validate current login."));
-        if (isUnauthorizedError(validated.cause)) {
+        if (validated._tag === "unauthorized") {
           return yield* Effect.fail(new LoginTokenInvalidError({ envTokenActive }));
         }
 
@@ -237,14 +232,6 @@ function browserLoginEffect(options: BrowserLoginOptions) {
 
     return yield* Effect.fail(new LoginTimeoutError());
   });
-}
-
-function isUnauthorizedError(cause: unknown): boolean {
-  return (
-    typeof cause === "object" &&
-    cause !== null &&
-    (cause as { _tag?: string })._tag === "Unauthorized"
-  );
 }
 
 export {

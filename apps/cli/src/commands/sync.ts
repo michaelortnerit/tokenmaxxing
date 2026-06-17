@@ -34,6 +34,7 @@ import {
   shouldUseClack,
   writeJson,
 } from "../output";
+import { validateCurrentLogin } from "../auth-validation";
 import { browserLoginEffect } from "./login";
 import { NotLoggedInError } from "./whoami";
 
@@ -503,17 +504,12 @@ function resolveSyncAuth(options: ResolveSyncAuthOptions) {
       baseUrl: authenticatedConfig.apiUrl,
       token: authenticatedConfig.token,
     });
-    const spinner =
-      options.showStoredLoginSpinner === true
-        ? yield* humanSpinner("Checking current login...", options)
-        : undefined;
-    const validated = yield* client.me.me().pipe(
-      Effect.map((me) => ({ _tag: "valid" as const, user: me.user })),
-      Effect.catch((cause) => Effect.succeed({ _tag: "invalid" as const, cause })),
-    );
+    const validated = yield* validateCurrentLogin(client, {
+      ...options,
+      showSpinner: options.showStoredLoginSpinner === true,
+    });
 
     if (validated._tag === "valid") {
-      yield* Effect.sync(() => spinner?.stop("Validated current login."));
       return {
         authSource: "stored" as const,
         client,
@@ -522,8 +518,7 @@ function resolveSyncAuth(options: ResolveSyncAuthOptions) {
       };
     }
 
-    yield* Effect.sync(() => spinner?.error("Could not validate current login."));
-    if (!isUnauthorizedError(validated.cause)) {
+    if (validated._tag === "failed") {
       return yield* Effect.fail(new SyncAuthValidationError({ cause: validated.cause }));
     }
 
@@ -552,14 +547,6 @@ function loginForSync() {
       user: login.user,
     };
   });
-}
-
-function isUnauthorizedError(cause: unknown): boolean {
-  return (
-    typeof cause === "object" &&
-    cause !== null &&
-    (cause as { _tag?: string })._tag === "Unauthorized"
-  );
 }
 
 function formatSyncUsd(value: number): string {
