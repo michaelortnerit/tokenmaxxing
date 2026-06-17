@@ -1,6 +1,7 @@
 import { Data, Effect } from "effect";
 import { Command, Flag } from "effect/unstable/cli";
 
+import packageJson from "../../package.json";
 import { humanFrame, humanLog, writeJson } from "../output";
 import {
   autoUpdateCommandDescription,
@@ -27,6 +28,19 @@ type ServiceRefreshResult =
     }
   | {
       _tag: "refreshed";
+    };
+
+type VersionCheckResult =
+  | {
+      _tag: "available";
+      currentVersion: string;
+      latestVersion: string;
+      shouldUpdate: boolean;
+    }
+  | {
+      _tag: "unavailable";
+      currentVersion: string;
+      latestVersion: null;
     };
 
 class UpgradeCommandNotFoundError extends Data.TaggedError("UpgradeCommandNotFoundError")<{}> {
@@ -58,6 +72,12 @@ class UpgradeFailedError extends Data.TaggedError("UpgradeFailedError")<{
     "error: failed to upgrade tokenmaxxing\nhint: try upgrading with your package manager";
 }
 
+class UpgradeVersionCheckError extends Data.TaggedError("UpgradeVersionCheckError")<{
+  readonly cause: unknown;
+}> {}
+
+const npmLatestUrl = "https://registry.npmjs.org/@851-labs%2Ftokenmaxxing/latest";
+
 const upgradeCommand = Command.make(
   "upgrade",
   {
@@ -72,8 +92,10 @@ function upgradeEffect(options: { json?: boolean | undefined } = {}) {
 
 function upgradeProgram(
   runtime: {
+    currentVersion?: string;
     env?: Record<string, string | undefined>;
     findCommandInstall?: () => Effect.Effect<CommandInstall | null, unknown>;
+    getLatestVersion?: () => Effect.Effect<string, unknown>;
     home?: string;
     isServiceInstalled?: (paths: ServicePaths) => Effect.Effect<boolean, never>;
     platform?: NodeJS.Platform;
@@ -114,8 +136,48 @@ function upgradeProgram(
     }
 
     const command = autoUpdateCommandDescription(manager);
+    const currentVersion = runtime.currentVersion ?? packageJson.version;
+    const versionCheck = yield* checkLatestVersion(
+      currentVersion,
+      runtime.getLatestVersion ?? getLatestCliVersion,
+    );
 
-    yield* humanLog("info", `Detected package manager: ${manager}`, options);
+    yield* humanLog("info", `Using method: ${manager}`, options);
+
+    if (versionCheck._tag === "available" && !versionCheck.shouldUpdate) {
+      if (options.json) {
+        yield* writeJson({
+          command,
+          currentVersion: versionCheck.currentVersion,
+          latestVersion: versionCheck.latestVersion,
+          packageManager: manager,
+          service: { status: "skipped" },
+          skipped: true,
+          status: "ok",
+          updated: false,
+          versionCheck: "ok",
+        });
+        return;
+      }
+
+      yield* humanLog(
+        "info",
+        `No updates pending (${versionCheck.currentVersion}); upgrade skipped.`,
+        options,
+      );
+      return;
+    }
+
+    if (versionCheck._tag === "available") {
+      yield* humanLog(
+        "step",
+        `From ${versionCheck.currentVersion} -> ${versionCheck.latestVersion}`,
+        options,
+      );
+    } else {
+      yield* humanLog("warn", "Could not check latest version; running upgrade anyway.", options);
+    }
+
     yield* humanLog("info", `Running: ${command}`, options);
 
     yield* (runtime.runPackageManagerUpdate ?? runPackageManagerUpdate)(manager).pipe(
@@ -128,15 +190,118 @@ function upgradeProgram(
     if (options.json) {
       yield* writeJson({
         command,
+        currentVersion: versionCheck.currentVersion,
+        latestVersion: versionCheck.latestVersion,
         packageManager: manager,
         service: serviceRefreshJson(refreshResult),
+        skipped: false,
         status: "ok",
+        updated: true,
+        versionCheck: versionCheck._tag === "available" ? "ok" : "unavailable",
       });
       return;
     }
 
     yield* humanLog("info", formatServiceRefreshResult(refreshResult), options);
   });
+}
+
+function checkLatestVersion(
+  currentVersion: string,
+  getLatestVersion: () => Effect.Effect<string, unknown>,
+): Effect.Effect<VersionCheckResult, never> {
+  return getLatestVersion().pipe(
+    Effect.match({
+      onFailure: () => ({
+        _tag: "unavailable" as const,
+        currentVersion,
+        latestVersion: null,
+      }),
+      onSuccess: (latestVersion) => ({
+        _tag: "available" as const,
+        currentVersion,
+        latestVersion,
+        shouldUpdate: shouldUpdateVersion(currentVersion, latestVersion),
+      }),
+    }),
+  );
+}
+
+function getLatestCliVersion(): Effect.Effect<string, UpgradeVersionCheckError> {
+  return Effect.gen(function* () {
+    const response = yield* Effect.tryPromise({
+      try: () =>
+        fetch(npmLatestUrl, {
+          headers: {
+            accept: "application/json",
+          },
+        }),
+      catch: (cause) => new UpgradeVersionCheckError({ cause }),
+    });
+
+    if (!response.ok) {
+      return yield* Effect.fail(
+        new UpgradeVersionCheckError({ cause: `registry returned ${response.status}` }),
+      );
+    }
+
+    const body = yield* Effect.tryPromise({
+      try: () => response.json() as Promise<unknown>,
+      catch: (cause) => new UpgradeVersionCheckError({ cause }),
+    });
+    const latestVersion = registryLatestVersion(body);
+    if (latestVersion === null) {
+      return yield* Effect.fail(
+        new UpgradeVersionCheckError({ cause: "registry response missing version" }),
+      );
+    }
+
+    return latestVersion;
+  });
+}
+
+function registryLatestVersion(body: unknown): string | null {
+  if (body === null || typeof body !== "object" || !("version" in body)) {
+    return null;
+  }
+
+  const version = body.version;
+  return typeof version === "string" && version.length > 0 ? version : null;
+}
+
+function shouldUpdateVersion(currentVersion: string, latestVersion: string): boolean {
+  if (currentVersion === latestVersion) {
+    return false;
+  }
+
+  const comparison = compareStableVersions(currentVersion, latestVersion);
+  return comparison === null ? true : comparison < 0;
+}
+
+function compareStableVersions(left: string, right: string): number | null {
+  const leftParts = stableVersionParts(left);
+  const rightParts = stableVersionParts(right);
+  if (leftParts === null || rightParts === null) {
+    return null;
+  }
+
+  for (let index = 0; index < leftParts.length; index += 1) {
+    const difference = leftParts[index]! - rightParts[index]!;
+    if (difference !== 0) {
+      return difference;
+    }
+  }
+
+  return 0;
+}
+
+function stableVersionParts(version: string): [number, number, number] | null {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
+  if (match === null) {
+    return null;
+  }
+
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
 }
 
 function refreshInstalledService(

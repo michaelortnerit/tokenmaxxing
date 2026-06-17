@@ -32,7 +32,9 @@ describe("upgradeProgram", () => {
 
     const exit = await Effect.runPromiseExit(
       upgradeProgram({
+        currentVersion: "0.4.3",
         findCommandInstall: () => Effect.succeed(install),
+        getLatestVersion: () => Effect.succeed("0.4.4"),
         isServiceInstalled: () => Effect.succeed(false),
         runPackageManagerUpdate: (manager) =>
           Effect.sync(() => {
@@ -44,10 +46,140 @@ describe("upgradeProgram", () => {
     expect(exit._tag).toBe("Success");
     expect(managers).toEqual(["npm"]);
     expect(logs).toEqual([
-      "Detected package manager: npm",
+      "Using method: npm",
+      "From 0.4.3 -> 0.4.4",
       "Running: npm install -g @851-labs/tokenmaxxing@latest --silent",
       "Upgraded tokenmaxxing.",
       "Service: not installed.",
+    ]);
+  });
+
+  it("skips the package manager update when no update is pending", async () => {
+    const { layer, logs } = testConsole();
+    const managers: string[] = [];
+    const refreshes: Array<{ autoUpdate: boolean; commandPath: string }> = [];
+
+    const exit = await Effect.runPromiseExit(
+      upgradeProgram({
+        currentVersion: "0.4.3",
+        findCommandInstall: () => Effect.succeed(install),
+        getLatestVersion: () => Effect.succeed("0.4.3"),
+        isServiceInstalled: () => Effect.succeed(true),
+        refreshService: (options) =>
+          Effect.sync(() => {
+            refreshes.push(options);
+          }),
+        runPackageManagerUpdate: (manager) =>
+          Effect.sync(() => {
+            managers.push(manager);
+          }),
+      }).pipe(Effect.provide(layer)),
+    );
+
+    expect(exit._tag).toBe("Success");
+    expect(managers).toEqual([]);
+    expect(refreshes).toEqual([]);
+    expect(logs).toEqual(["Using method: npm", "No updates pending (0.4.3); upgrade skipped."]);
+  });
+
+  it("falls back to running the upgrade when latest version lookup fails", async () => {
+    const { layer, logs } = testConsole();
+    const managers: string[] = [];
+
+    const exit = await Effect.runPromiseExit(
+      upgradeProgram({
+        currentVersion: "0.4.3",
+        findCommandInstall: () => Effect.succeed(install),
+        getLatestVersion: () => Effect.fail("offline"),
+        isServiceInstalled: () => Effect.succeed(false),
+        runPackageManagerUpdate: (manager) =>
+          Effect.sync(() => {
+            managers.push(manager);
+          }),
+      }).pipe(Effect.provide(layer)),
+    );
+
+    expect(exit._tag).toBe("Success");
+    expect(managers).toEqual(["npm"]);
+    expect(logs).toEqual([
+      "Using method: npm",
+      "Could not check latest version; running upgrade anyway.",
+      "Running: npm install -g @851-labs/tokenmaxxing@latest --silent",
+      "Upgraded tokenmaxxing.",
+      "Service: not installed.",
+    ]);
+  });
+
+  it("writes JSON when no update is pending", async () => {
+    const { layer, logs } = testConsole();
+    const managers: string[] = [];
+
+    const exit = await Effect.runPromiseExit(
+      upgradeProgram(
+        {
+          currentVersion: "0.4.3",
+          findCommandInstall: () => Effect.succeed(install),
+          getLatestVersion: () => Effect.succeed("0.4.3"),
+          runPackageManagerUpdate: (manager) =>
+            Effect.sync(() => {
+              managers.push(manager);
+            }),
+        },
+        { json: true },
+      ).pipe(Effect.provide(layer)),
+    );
+
+    expect(exit._tag).toBe("Success");
+    expect(managers).toEqual([]);
+    expect(logs).toEqual([
+      JSON.stringify({
+        command: "npm install -g @851-labs/tokenmaxxing@latest --silent",
+        currentVersion: "0.4.3",
+        latestVersion: "0.4.3",
+        packageManager: "npm",
+        service: { status: "skipped" },
+        skipped: true,
+        status: "ok",
+        updated: false,
+        versionCheck: "ok",
+      }),
+    ]);
+  });
+
+  it("writes JSON after upgrading", async () => {
+    const { layer, logs } = testConsole();
+    const managers: string[] = [];
+
+    const exit = await Effect.runPromiseExit(
+      upgradeProgram(
+        {
+          currentVersion: "0.4.3",
+          findCommandInstall: () => Effect.succeed(install),
+          getLatestVersion: () => Effect.succeed("0.4.4"),
+          isServiceInstalled: () => Effect.succeed(false),
+          runPackageManagerUpdate: (manager) =>
+            Effect.sync(() => {
+              managers.push(manager);
+            }),
+        },
+        { json: true },
+      ).pipe(Effect.provide(layer)),
+    );
+
+    expect(exit._tag).toBe("Success");
+    expect(managers).toEqual(["npm"]);
+    expect(logs).toEqual([
+      JSON.stringify({
+        command: "npm install -g @851-labs/tokenmaxxing@latest --silent",
+        currentVersion: "0.4.3",
+        latestVersion: "0.4.4",
+        packageManager: "npm",
+        service: { status: "not-installed" },
+        skipped: false,
+        status: "ok",
+        updated: true,
+        versionCheck: "ok",
+      }),
     ]);
   });
 
@@ -57,7 +189,9 @@ describe("upgradeProgram", () => {
 
     const exit = await Effect.runPromiseExit(
       upgradeProgram({
+        currentVersion: "0.4.3",
         findCommandInstall: () => Effect.succeed(install),
+        getLatestVersion: () => Effect.succeed("0.4.4"),
         isServiceInstalled: () => Effect.succeed(true),
         readServiceMetadata: () =>
           Effect.succeed({
@@ -86,7 +220,9 @@ describe("upgradeProgram", () => {
 
     const exit = await Effect.runPromiseExit(
       upgradeProgram({
+        currentVersion: "0.4.3",
         findCommandInstall: () => Effect.succeed(install),
+        getLatestVersion: () => Effect.succeed("0.4.4"),
         isServiceInstalled: () => Effect.succeed(true),
         refreshService: () => Effect.fail(new Error("refresh failed")),
         runPackageManagerUpdate: () => Effect.void,
