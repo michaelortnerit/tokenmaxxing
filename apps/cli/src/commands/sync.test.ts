@@ -17,6 +17,7 @@ import { browserLoginEffect } from "./login";
 import {
   formatSyncUsd,
   openProfileIfAvailable,
+  renderSyncSourceResult,
   renderSyncSuccess,
   renderSyncTable,
   resolveSyncAuth,
@@ -205,6 +206,32 @@ describe("renderSyncTable", () => {
 
     expect(table).toContain("\x1b[32msynced");
     expect(table).toContain("\x1b[33mskipped");
+  });
+});
+
+describe("renderSyncSourceResult", () => {
+  it("renders a concise synced row for interactive sync output", () => {
+    expect(
+      renderSyncSourceResult({
+        source: "claude",
+        summary: { days: 17, models: 7, rows: 42, sessions: 54, spendUsd: 2_672 },
+      }),
+    ).toBe("claude synced - 17 days - 54 sessions - 7 models - $2,672");
+  });
+
+  it("handles unknown session counts without a dangling placeholder", () => {
+    expect(
+      renderSyncSourceResult({
+        source: "opencode",
+        summary: { days: 85, models: 9, rows: 123, sessions: null, spendUsd: 1_699 },
+      }),
+    ).toBe("opencode synced - 85 days - sessions unknown - 9 models - $1,699");
+  });
+
+  it("renders skipped sources as a single status row", () => {
+    expect(renderSyncSourceResult({ source: "gemini", summary: null })).toBe(
+      "gemini skipped (no data)",
+    );
   });
 });
 

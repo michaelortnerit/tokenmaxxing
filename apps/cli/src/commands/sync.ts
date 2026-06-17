@@ -26,7 +26,14 @@ import {
   TerminalService,
   type TokenmaxxingApiClient,
 } from "../services";
-import { formatUrl, humanFrame, humanLog, humanSpinner, writeJson } from "../output";
+import {
+  formatUrl,
+  humanFrame,
+  humanLog,
+  humanSpinner,
+  shouldUseClack,
+  writeJson,
+} from "../output";
 import { browserLoginEffect } from "./login";
 import { NotLoggedInError } from "./whoami";
 
@@ -157,18 +164,28 @@ function syncEffect(options: SyncOptions) {
         return;
       }
 
-      yield* Effect.sync(() => {
-        console.log("");
-        console.log(renderSyncTable(result.sourceResults));
-        console.log("");
+      if (shouldRenderInlineSync(options)) {
         if (result.rows === 0) {
-          console.log("Nothing to sync.");
+          yield* humanLog("info", "Nothing to sync.", options);
         } else if (result.dryRun) {
-          console.log("Dry run complete. Nothing pushed.");
+          yield* humanLog("success", "Dry run complete. Nothing pushed.", options);
         } else if (result.profileUrl !== undefined) {
-          console.log(renderSyncSuccess(result.profileUrl));
+          yield* humanLog("info", `Profile: ${formatUrl(result.profileUrl)}`, options);
         }
-      });
+      } else {
+        yield* Effect.sync(() => {
+          console.log("");
+          console.log(renderSyncTable(result.sourceResults));
+          console.log("");
+          if (result.rows === 0) {
+            console.log("Nothing to sync.");
+          } else if (result.dryRun) {
+            console.log("Dry run complete. Nothing pushed.");
+          } else if (result.profileUrl !== undefined) {
+            console.log(renderSyncSuccess(result.profileUrl));
+          }
+        });
+      }
 
       if (!result.dryRun && result.rows > 0 && result.profileUrl !== undefined) {
         yield* openProfileIfAvailable(result.profileUrl);
@@ -191,17 +208,17 @@ function syncProgram(options: SyncProgramOptions) {
     const rawReports: RawUsageReportInput[] = [];
     const sourceSummaries: Record<string, SyncSourceSummary | null> = {};
     const sourceResults: SyncSourceResult[] = [];
+    const renderInlineResults = shouldRenderInlineSync(options);
     for (const source of sources) {
-      const spinner = yield* humanSpinner(`Scanning ${source.source}...`, options);
+      const spinner = yield* humanSpinner(`Syncing ${source.source}...`, options);
       const dailyReport = yield* runCcusageDailyReport(source, { since: options.since }).pipe(
-        Effect.tapError(() =>
-          Effect.sync(() => spinner.error(`Failed scanning ${source.source}.`)),
-        ),
+        Effect.tapError(() => Effect.sync(() => spinner.error(`Failed syncing ${source.source}.`))),
       );
       if (Option.isNone(dailyReport) || dailyReport.value.daily.length === 0) {
-        sourceSummaries[source.source] = null;
-        sourceResults.push({ source: source.source, summary: null });
-        spinner.stop();
+        const result = { source: source.source, summary: null };
+        sourceSummaries[source.source] = result.summary;
+        sourceResults.push(result);
+        spinner.stop(renderInlineResults ? renderSyncSourceResult(result) : undefined);
         continue;
       }
 
@@ -214,9 +231,7 @@ function syncProgram(options: SyncProgramOptions) {
       });
 
       const sessionReport = yield* runCcusageSessionReport(source, { since: options.since }).pipe(
-        Effect.tapError(() =>
-          Effect.sync(() => spinner.error(`Failed scanning ${source.source}.`)),
-        ),
+        Effect.tapError(() => Effect.sync(() => spinner.error(`Failed syncing ${source.source}.`))),
       );
       const sessionCount = Option.match(sessionReport, {
         onNone: () => null,
@@ -231,10 +246,11 @@ function syncProgram(options: SyncProgramOptions) {
         });
       }
       const summary = { ...summarize(sourceRows), sessions: sessionCount };
+      const result = { source: source.source, summary };
       sourceSummaries[source.source] = summary;
-      sourceResults.push({ source: source.source, summary });
+      sourceResults.push(result);
       rows.push(...sourceRows);
-      spinner.stop();
+      spinner.stop(renderInlineResults ? renderSyncSourceResult(result) : undefined);
     }
 
     if (options.dryRun || rows.length === 0) {
@@ -334,6 +350,29 @@ function openProfileIfAvailable(profileUrl: string) {
       );
     }
   });
+}
+
+function shouldRenderInlineSync(options: { json?: boolean; silent?: boolean }): boolean {
+  return options.json !== true && options.silent !== true && shouldUseClack();
+}
+
+function renderSyncSourceResult(result: SyncSourceResult): string {
+  if (result.summary === null) {
+    return `${result.source} skipped (no data)`;
+  }
+
+  const sessions =
+    result.summary.sessions === null
+      ? "sessions unknown"
+      : formatCount(result.summary.sessions, "session");
+
+  return [
+    `${result.source} synced`,
+    formatCount(result.summary.days, "day"),
+    sessions,
+    formatCount(result.summary.models, "model"),
+    formatSyncUsd(result.summary.spendUsd),
+  ].join(" - ");
 }
 
 function renderSyncTable(
@@ -503,10 +542,15 @@ function formatInteger(value: number): string {
   return integer.format(value);
 }
 
+function formatCount(value: number, noun: string): string {
+  return `${formatInteger(value)} ${noun}${value === 1 ? "" : "s"}`;
+}
+
 export {
   formatSyncUsd,
   openProfileIfAvailable,
   renderSyncSuccess,
+  renderSyncSourceResult,
   renderSyncTable,
   resolveSyncAuth,
   sourceStatsForSync,
