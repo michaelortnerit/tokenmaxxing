@@ -6,7 +6,7 @@ import { loginCommand } from "./login";
 import { logoutCommand } from "./logout";
 import { serviceCommand } from "./service";
 import { syncCommand } from "./sync";
-import { updateCommand } from "./update";
+import { upgradeCommand } from "./upgrade";
 import { whoamiCommand } from "./whoami";
 
 const tokenmaxxingCommand = Command.make("tokenmaxxing").pipe(
@@ -17,7 +17,7 @@ const tokenmaxxingCommand = Command.make("tokenmaxxing").pipe(
     logoutCommand,
     whoamiCommand,
     syncCommand,
-    updateCommand,
+    upgradeCommand,
     serviceCommand,
   ]),
 );

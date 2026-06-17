@@ -29,20 +29,20 @@ type ServiceRefreshResult =
       _tag: "refreshed";
     };
 
-class UpdateCommandNotFoundError extends Data.TaggedError("UpdateCommandNotFoundError")<{}> {
+class UpgradeCommandNotFoundError extends Data.TaggedError("UpgradeCommandNotFoundError")<{}> {
   override message =
     "error: tokenmaxxing is not installed globally\nhint: install it with bun, npm, pnpm, or yarn";
 }
 
-class UpdateEphemeralCommandError extends Data.TaggedError("UpdateEphemeralCommandError")<{
+class UpgradeEphemeralCommandError extends Data.TaggedError("UpgradeEphemeralCommandError")<{
   readonly commandPath: string;
 }> {
   override get message() {
-    return `error: tokenmaxxing resolved to a temporary runner path\npath: ${this.commandPath}\nhint: install it globally with bun, npm, pnpm, or yarn before running tokenmaxxing update`;
+    return `error: tokenmaxxing resolved to a temporary runner path\npath: ${this.commandPath}\nhint: install it globally with bun, npm, pnpm, or yarn before running tokenmaxxing upgrade`;
   }
 }
 
-class UpdateManagerError extends Data.TaggedError("UpdateManagerError")<{
+class UpgradeManagerError extends Data.TaggedError("UpgradeManagerError")<{
   readonly commandPath: string;
   readonly resolvedCommandPath: string;
 }> {
@@ -51,22 +51,22 @@ class UpdateManagerError extends Data.TaggedError("UpdateManagerError")<{
   }
 }
 
-class UpdateFailedError extends Data.TaggedError("UpdateFailedError")<{
+class UpgradeFailedError extends Data.TaggedError("UpgradeFailedError")<{
   readonly cause: unknown;
 }> {
   override message =
-    "error: failed to update tokenmaxxing\nhint: try updating with your package manager";
+    "error: failed to upgrade tokenmaxxing\nhint: try upgrading with your package manager";
 }
 
-const updateCommand = Command.make("update", {}, () => updateEffect()).pipe(
-  Command.withDescription("Update the globally installed CLI"),
+const upgradeCommand = Command.make("upgrade", {}, () => upgradeEffect()).pipe(
+  Command.withDescription("Upgrade the globally installed CLI"),
 );
 
-function updateEffect() {
-  return updateProgram();
+function upgradeEffect() {
+  return upgradeProgram();
 }
 
-function updateProgram(
+function upgradeProgram(
   runtime: {
     env?: Record<string, string | undefined>;
     findCommandInstall?: () => Effect.Effect<CommandInstall | null, unknown>;
@@ -89,20 +89,20 @@ function updateProgram(
       runtime.findCommandInstall ?? (() => findTokenmaxxingCommandInstall(env, platform))
     )().pipe(
       Effect.flatMap((value) =>
-        value === null ? Effect.fail(new UpdateCommandNotFoundError()) : Effect.succeed(value),
+        value === null ? Effect.fail(new UpgradeCommandNotFoundError()) : Effect.succeed(value),
       ),
     );
 
     if (isEphemeralCommandPath(install.commandPath)) {
       return yield* Effect.fail(
-        new UpdateEphemeralCommandError({ commandPath: install.commandPath }),
+        new UpgradeEphemeralCommandError({ commandPath: install.commandPath }),
       );
     }
 
     const manager = install.autoUpdateManager;
     if (manager === null) {
       return yield* Effect.fail(
-        new UpdateManagerError({
+        new UpgradeManagerError({
           commandPath: install.commandPath,
           resolvedCommandPath: install.resolvedCommandPath,
         }),
@@ -115,11 +115,11 @@ function updateProgram(
     });
 
     yield* (runtime.runPackageManagerUpdate ?? runPackageManagerUpdate)(manager).pipe(
-      Effect.mapError((cause) => new UpdateFailedError({ cause })),
+      Effect.mapError((cause) => new UpgradeFailedError({ cause })),
     );
 
     yield* Effect.sync(() => {
-      console.log("Updated tokenmaxxing.");
+      console.log("Upgraded tokenmaxxing.");
     });
 
     const refreshResult = yield* refreshInstalledService(install, runtime);
@@ -191,11 +191,11 @@ function formatServiceRefreshResult(result: ServiceRefreshResult): string {
 export {
   formatServiceRefreshResult,
   refreshInstalledService,
-  updateCommand,
-  updateEffect,
-  updateProgram,
-  UpdateCommandNotFoundError,
-  UpdateEphemeralCommandError,
-  UpdateFailedError,
-  UpdateManagerError,
+  upgradeCommand,
+  upgradeEffect,
+  upgradeProgram,
+  UpgradeCommandNotFoundError,
+  UpgradeEphemeralCommandError,
+  UpgradeFailedError,
+  UpgradeManagerError,
 };

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { ConsoleService } from "../services";
 import type { CommandInstall, ServiceMetadata } from "./service";
-import { formatServiceRefreshResult, refreshInstalledService, updateProgram } from "./update";
+import { formatServiceRefreshResult, refreshInstalledService, upgradeProgram } from "./upgrade";
 
 const install: CommandInstall = {
   autoUpdateManager: "npm",
@@ -25,13 +25,13 @@ function testConsole() {
   return { layer, logs };
 }
 
-describe("updateProgram", () => {
-  it("updates through the detected package manager and skips service refresh when absent", async () => {
+describe("upgradeProgram", () => {
+  it("upgrades through the detected package manager and skips service refresh when absent", async () => {
     const { layer, logs } = testConsole();
     const managers: string[] = [];
 
     const exit = await Effect.runPromiseExit(
-      updateProgram({
+      upgradeProgram({
         findCommandInstall: () => Effect.succeed(install),
         isServiceInstalled: () => Effect.succeed(false),
         runPackageManagerUpdate: (manager) =>
@@ -46,17 +46,17 @@ describe("updateProgram", () => {
     expect(logs).toEqual([
       "Detected package manager: npm",
       "Running: npm install -g @851-labs/tokenmaxxing@latest --silent",
-      "Updated tokenmaxxing.",
+      "Upgraded tokenmaxxing.",
       "Service: not installed.",
     ]);
   });
 
-  it("refreshes an installed service after updating", async () => {
+  it("refreshes an installed service after upgrading", async () => {
     const { layer, logs } = testConsole();
     const refreshes: Array<{ autoUpdate: boolean; commandPath: string }> = [];
 
     const exit = await Effect.runPromiseExit(
-      updateProgram({
+      upgradeProgram({
         findCommandInstall: () => Effect.succeed(install),
         isServiceInstalled: () => Effect.succeed(true),
         readServiceMetadata: () =>
@@ -81,11 +81,11 @@ describe("updateProgram", () => {
     expect(logs).toContain("Service: refreshed.");
   });
 
-  it("keeps update successful when service refresh fails", async () => {
+  it("keeps upgrade successful when service refresh fails", async () => {
     const { layer, logs } = testConsole();
 
     const exit = await Effect.runPromiseExit(
-      updateProgram({
+      upgradeProgram({
         findCommandInstall: () => Effect.succeed(install),
         isServiceInstalled: () => Effect.succeed(true),
         refreshService: () => Effect.fail(new Error("refresh failed")),
@@ -100,7 +100,7 @@ describe("updateProgram", () => {
   it("rejects ephemeral package-runner installs", async () => {
     const { layer } = testConsole();
     const exit = await Effect.runPromiseExit(
-      updateProgram({
+      upgradeProgram({
         findCommandInstall: () =>
           Effect.succeed({
             ...install,
@@ -115,7 +115,7 @@ describe("updateProgram", () => {
   it("rejects unknown package managers", async () => {
     const { layer } = testConsole();
     const exit = await Effect.runPromiseExit(
-      updateProgram({
+      upgradeProgram({
         findCommandInstall: () => Effect.succeed({ ...install, autoUpdateManager: null }),
       }).pipe(Effect.provide(layer)),
     );
