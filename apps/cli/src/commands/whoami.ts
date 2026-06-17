@@ -1,7 +1,8 @@
 import { Data, Effect } from "effect";
 import { Command, Flag } from "effect/unstable/cli";
 
-import { ApiClientService, ConfigService, ConsoleService } from "../services";
+import { ApiClientService, ConfigService } from "../services";
+import { humanLog, writeJson } from "../output";
 
 class NotLoggedInError extends Data.TaggedError("NotLoggedInError")<{}> {
   override message = "error: not logged in\nhint: run tokenmaxxing login";
@@ -26,7 +27,6 @@ function whoamiEffect(options: { json: boolean }) {
   return Effect.gen(function* () {
     const config = yield* Effect.service(ConfigService);
     const clients = yield* Effect.service(ApiClientService);
-    const console = yield* Effect.service(ConsoleService);
 
     const stored = yield* config.readConfig();
     if (stored.token === undefined) {
@@ -46,13 +46,15 @@ function whoamiEffect(options: { json: boolean }) {
         ),
       );
 
-    yield* Effect.sync(() => {
-      if (options.json) {
-        console.log(JSON.stringify({ user: me.user }));
-      } else {
-        console.log(me.user.name === null ? me.user.login : `${me.user.login} (${me.user.name})`);
-      }
-    });
+    if (options.json) {
+      yield* writeJson({ user: me.user });
+    } else {
+      yield* humanLog(
+        "info",
+        me.user.name === null ? me.user.login : `${me.user.login} (${me.user.name})`,
+        options,
+      );
+    }
   });
 }
 

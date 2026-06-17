@@ -26,6 +26,7 @@ import {
   TerminalService,
   type TokenmaxxingApiClient,
 } from "../services";
+import { humanLog, humanSpinner, writeJson } from "../output";
 import { browserLoginEffect } from "./login";
 import { NotLoggedInError } from "./whoami";
 
@@ -97,6 +98,10 @@ interface SyncOptions {
   sources?: string | undefined;
 }
 
+interface SyncProgramOptions extends SyncOptions {
+  silent?: boolean | undefined;
+}
+
 interface ResolveSyncAuthOptions {
   json: boolean;
 }
@@ -116,6 +121,16 @@ interface SyncSourceResult {
   summary: SyncSourceSummary | null;
 }
 
+interface SyncResult {
+  dryRun: boolean;
+  profileUrl?: string | undefined;
+  rows: number;
+  sourceResults: SyncSourceResult[];
+  sources: Record<string, SyncSourceSummary | null>;
+  status: "ok";
+  upserted?: number | undefined;
+}
+
 interface FormatOptions {
   env?: Record<string, string | undefined>;
 }
@@ -132,9 +147,34 @@ interface TableCell {
 function syncEffect(options: SyncOptions) {
   return Effect.gen(function* () {
     const console = yield* Effect.service(ConsoleService);
+    const result = yield* syncProgram(options);
 
-    const output = options.json ? { error: console.error, log: () => {} } : console;
+    if (options.json) {
+      yield* writeJson(syncJsonPayload(result));
+      return;
+    }
 
+    yield* Effect.sync(() => {
+      console.log("");
+      console.log(renderSyncTable(result.sourceResults));
+      console.log("");
+      if (result.rows === 0) {
+        console.log("Nothing to sync.");
+      } else if (result.dryRun) {
+        console.log("Dry run complete. Nothing pushed.");
+      } else if (result.profileUrl !== undefined) {
+        console.log(renderSyncSuccess(result.profileUrl));
+      }
+    });
+
+    if (!result.dryRun && result.rows > 0 && result.profileUrl !== undefined) {
+      yield* openProfileIfAvailable(result.profileUrl);
+    }
+  });
+}
+
+function syncProgram(options: SyncProgramOptions) {
+  return Effect.gen(function* () {
     const requested = options.sources?.split(",") ?? DEFAULT_SOURCE_NAMES;
     const { invalid, sources } = resolveSources(requested);
     if (invalid.length > 0) {
@@ -148,11 +188,16 @@ function syncEffect(options: SyncOptions) {
     const sourceSummaries: Record<string, SyncSourceSummary | null> = {};
     const sourceResults: SyncSourceResult[] = [];
     for (const source of sources) {
-      yield* Effect.sync(() => output.log(`Scanning ${source.source}...`));
-      const dailyReport = yield* runCcusageDailyReport(source, { since: options.since });
+      const spinner = yield* humanSpinner(`Scanning ${source.source}...`, options);
+      const dailyReport = yield* runCcusageDailyReport(source, { since: options.since }).pipe(
+        Effect.tapError(() =>
+          Effect.sync(() => spinner.error(`Failed scanning ${source.source}.`)),
+        ),
+      );
       if (Option.isNone(dailyReport) || dailyReport.value.daily.length === 0) {
         sourceSummaries[source.source] = null;
         sourceResults.push({ source: source.source, summary: null });
+        spinner.stop();
         continue;
       }
 
@@ -164,7 +209,11 @@ function syncEffect(options: SyncOptions) {
         source: source.source,
       });
 
-      const sessionReport = yield* runCcusageSessionReport(source, { since: options.since });
+      const sessionReport = yield* runCcusageSessionReport(source, { since: options.since }).pipe(
+        Effect.tapError(() =>
+          Effect.sync(() => spinner.error(`Failed scanning ${source.source}.`)),
+        ),
+      );
       const sessionCount = Option.match(sessionReport, {
         onNone: () => null,
         onSome: (report) => report.sessions.length,
@@ -181,33 +230,29 @@ function syncEffect(options: SyncOptions) {
       sourceSummaries[source.source] = summary;
       sourceResults.push({ source: source.source, summary });
       rows.push(...sourceRows);
+      spinner.stop();
     }
 
     if (options.dryRun || rows.length === 0) {
-      yield* Effect.sync(() => {
-        if (options.json) {
-          console.log(
-            JSON.stringify({
-              dryRun: options.dryRun,
-              rows: rows.length,
-              sources: sourceSummaries,
-              status: "ok",
-            }),
-          );
-        } else {
-          output.log("");
-          output.log(renderSyncTable(sourceResults));
-          output.log("");
-          output.log(rows.length === 0 ? "Nothing to sync." : "Dry run complete. Nothing pushed.");
-        }
-      });
-      return;
+      return {
+        dryRun: options.dryRun,
+        rows: rows.length,
+        sourceResults,
+        sources: sourceSummaries,
+        status: "ok" as const,
+      };
     }
 
     const device = { name: hostname(), platform: process.platform };
     let upserted = 0;
     if (auth === undefined) {
-      return;
+      return {
+        dryRun: false,
+        rows: rows.length,
+        sourceResults,
+        sources: sourceSummaries,
+        status: "ok" as const,
+      };
     }
 
     const response = yield* auth.client.usage
@@ -220,23 +265,34 @@ function syncEffect(options: SyncOptions) {
       .pipe(Effect.mapError((cause) => new SyncPushError({ cause })));
     upserted = response.upserted;
 
-    yield* Effect.sync(() => {
-      if (options.json) {
-        console.log(
-          JSON.stringify({ rows: rows.length, sources: sourceSummaries, status: "ok", upserted }),
-        );
-      } else {
-        const profileUrl = `${auth.config.wwwUrl}/${auth.user.login}`;
-        output.log("");
-        output.log(renderSyncTable(sourceResults));
-        output.log("");
-        output.log(renderSyncSuccess(profileUrl));
-      }
-    });
-    if (!options.json) {
-      yield* openProfileIfAvailable(`${auth.config.wwwUrl}/${auth.user.login}`);
-    }
+    return {
+      dryRun: false,
+      profileUrl: `${auth.config.wwwUrl}/${auth.user.login}`,
+      rows: rows.length,
+      sourceResults,
+      sources: sourceSummaries,
+      status: "ok" as const,
+      upserted,
+    };
   });
+}
+
+function syncJsonPayload(result: SyncResult) {
+  if (result.dryRun || result.rows === 0) {
+    return {
+      dryRun: result.dryRun,
+      rows: result.rows,
+      sources: result.sources,
+      status: result.status,
+    };
+  }
+
+  return {
+    rows: result.rows,
+    sources: result.sources,
+    status: result.status,
+    upserted: result.upserted ?? 0,
+  };
 }
 
 function sourceStatsForSync(
@@ -377,9 +433,6 @@ function resolveSyncAuth(options: ResolveSyncAuthOptions) {
   return Effect.gen(function* () {
     const config = yield* Effect.service(ConfigService);
     const clients = yield* Effect.service(ApiClientService);
-    const console = yield* Effect.service(ConsoleService);
-
-    const output = options.json ? { error: console.error, log: () => {} } : console;
 
     const stored = yield* config.readConfig();
     const envTokenActive = yield* config.hasEnvToken();
@@ -388,7 +441,7 @@ function resolveSyncAuth(options: ResolveSyncAuthOptions) {
         return yield* Effect.fail(new NotLoggedInError());
       }
 
-      yield* Effect.sync(() => output.log("Not logged in; starting browser login."));
+      yield* humanLog("info", "Not logged in; starting browser login.", options);
       return yield* loginForSync();
     }
 
@@ -411,9 +464,7 @@ function resolveSyncAuth(options: ResolveSyncAuthOptions) {
     }
 
     yield* config.clearToken();
-    yield* Effect.sync(() =>
-      output.log("Stored token is no longer valid; starting browser login."),
-    );
+    yield* humanLog("info", "Stored token is no longer valid; starting browser login.", options);
     return yield* loginForSync();
   });
 }
@@ -457,10 +508,12 @@ export {
   renderSyncTable,
   resolveSyncAuth,
   sourceStatsForSync,
+  syncJsonPayload,
   syncCommand,
   syncEffect,
+  syncProgram,
   SyncPushError,
   UnknownSourceError,
 };
 
-export type { ResolveSyncAuthOptions, SyncAuth, SyncOptions };
+export type { ResolveSyncAuthOptions, SyncAuth, SyncOptions, SyncResult };

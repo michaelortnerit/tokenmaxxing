@@ -30,6 +30,11 @@ const userFacingErrorTags = new Set([
   "ServiceUnsupportedPlatformError",
   "StartCliLoginError",
   "SyncPushError",
+  "UnknownSourceError",
+  "UpgradeCommandNotFoundError",
+  "UpgradeEphemeralCommandError",
+  "UpgradeFailedError",
+  "UpgradeManagerError",
   "WhoamiError",
   "WriteCliTokenError",
 ]);
@@ -61,15 +66,37 @@ function isVerboseArgv(argv: readonly string[]) {
   return verbose;
 }
 
+function isJsonArgv(argv: readonly string[]) {
+  let json = false;
+
+  for (const value of argv) {
+    if (value === "--") {
+      break;
+    }
+
+    if (value === "--json") {
+      json = true;
+      continue;
+    }
+
+    if (value === "--no-json") {
+      json = false;
+    }
+  }
+
+  return json;
+}
+
 function renderCliFailure<E>(
   cause: Cause.Cause<E>,
   options: {
+    json: boolean;
     verbose: boolean;
   },
 ) {
-  const message = messageForCause(cause);
+  const failure = failureForCause(cause);
 
-  if (!message) {
+  if (!failure) {
     return Effect.void;
   }
 
@@ -77,16 +104,25 @@ function renderCliFailure<E>(
     const output = yield* Effect.service(ConsoleService);
 
     yield* Effect.sync(() => {
-      output.error(message);
+      if (options.json) {
+        output.error(JSON.stringify(jsonFailureForCliFailure(failure)));
+      } else {
+        output.error(failure.message);
 
-      if (options.verbose) {
-        output.error(`debug:\n${Cause.pretty(cause)}`);
+        if (options.verbose) {
+          output.error(`debug:\n${Cause.pretty(cause)}`);
+        }
       }
     });
   });
 }
 
-function messageForCause<E>(cause: Cause.Cause<E>) {
+interface CliFailure {
+  code: string;
+  message: string;
+}
+
+function failureForCause<E>(cause: Cause.Cause<E>): CliFailure | undefined {
   if (Cause.hasInterruptsOnly(cause)) {
     return undefined;
   }
@@ -99,11 +135,17 @@ function messageForCause<E>(cause: Cause.Cause<E>) {
     }
 
     if (isUserFacingCliError(error.value)) {
-      return error.value.message;
+      return {
+        code: codeForTaggedError(error.value),
+        message: error.value.message,
+      };
     }
   }
 
-  return "error: unexpected CLI failure\nhint: rerun with --verbose and report the output";
+  return {
+    code: "unexpected_cli_failure",
+    message: "error: unexpected CLI failure\nhint: rerun with --verbose and report the output",
+  };
 }
 
 function isShowHelpError(value: unknown) {
@@ -121,4 +163,48 @@ function isUserFacingCliError(value: unknown): value is Error {
   );
 }
 
-export { isUserFacingCliError, isVerboseArgv, renderCliFailure, verboseGlobalFlag };
+function codeForTaggedError(error: Error): string {
+  const tag = (error as { _tag?: unknown })._tag;
+
+  if (typeof tag !== "string") {
+    return "cli_error";
+  }
+
+  const name = tag.endsWith("Error") ? tag.slice(0, -"Error".length) : tag;
+
+  return name
+    .replaceAll(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replaceAll(/([A-Z])([A-Z][a-z])/g, "$1_$2")
+    .toLowerCase();
+}
+
+function jsonFailureForCliFailure(failure: CliFailure) {
+  const parsed = parseCliMessage(failure.message);
+
+  return {
+    error: {
+      code: failure.code,
+      ...(parsed.hint === undefined ? {} : { hint: parsed.hint }),
+      message: parsed.message,
+    },
+    status: "error",
+  };
+}
+
+function parseCliMessage(message: string) {
+  const lines = message.split("\n");
+  const first = lines[0] ?? message;
+  const parsedMessage = first.startsWith("error: ") ? first.slice("error: ".length) : first;
+  const hint = lines.find((line) => line.startsWith("hint: "))?.slice("hint: ".length);
+
+  return { hint, message: parsedMessage };
+}
+
+export {
+  failureForCause,
+  isJsonArgv,
+  isUserFacingCliError,
+  isVerboseArgv,
+  renderCliFailure,
+  verboseGlobalFlag,
+};

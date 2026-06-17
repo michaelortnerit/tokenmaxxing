@@ -1,7 +1,7 @@
 import { Data, Effect } from "effect";
-import { Command } from "effect/unstable/cli";
+import { Command, Flag } from "effect/unstable/cli";
 
-import { ConsoleService } from "../services";
+import { humanLog, writeJson } from "../output";
 import {
   autoUpdateCommandDescription,
   type AutoUpdateManager,
@@ -58,12 +58,16 @@ class UpgradeFailedError extends Data.TaggedError("UpgradeFailedError")<{
     "error: failed to upgrade tokenmaxxing\nhint: try upgrading with your package manager";
 }
 
-const upgradeCommand = Command.make("upgrade", {}, () => upgradeEffect()).pipe(
-  Command.withDescription("Upgrade the globally installed CLI"),
-);
+const upgradeCommand = Command.make(
+  "upgrade",
+  {
+    json: Flag.boolean("json").pipe(Flag.withDescription("Output machine-readable JSON")),
+  },
+  ({ json }) => upgradeEffect({ json }),
+).pipe(Command.withDescription("Upgrade the globally installed CLI"));
 
-function upgradeEffect() {
-  return upgradeProgram();
+function upgradeEffect(options: { json?: boolean | undefined } = {}) {
+  return upgradeProgram({}, options);
 }
 
 function upgradeProgram(
@@ -80,9 +84,9 @@ function upgradeProgram(
     }) => Effect.Effect<void, unknown>;
     runPackageManagerUpdate?: (manager: AutoUpdateManager) => Effect.Effect<void, unknown>;
   } = {},
+  options: { json?: boolean | undefined } = {},
 ) {
   return Effect.gen(function* () {
-    const console = yield* Effect.service(ConsoleService);
     const env = runtime.env ?? process.env;
     const platform = runtime.platform ?? process.platform;
     const install = yield* (
@@ -109,23 +113,29 @@ function upgradeProgram(
       );
     }
 
-    yield* Effect.sync(() => {
-      console.log(`Detected package manager: ${manager}`);
-      console.log(`Running: ${autoUpdateCommandDescription(manager)}`);
-    });
+    const command = autoUpdateCommandDescription(manager);
+
+    yield* humanLog("info", `Detected package manager: ${manager}`, options);
+    yield* humanLog("info", `Running: ${command}`, options);
 
     yield* (runtime.runPackageManagerUpdate ?? runPackageManagerUpdate)(manager).pipe(
       Effect.mapError((cause) => new UpgradeFailedError({ cause })),
     );
 
-    yield* Effect.sync(() => {
-      console.log("Upgraded tokenmaxxing.");
-    });
+    yield* humanLog("success", "Upgraded tokenmaxxing.", options);
 
     const refreshResult = yield* refreshInstalledService(install, runtime);
-    yield* Effect.sync(() => {
-      console.log(formatServiceRefreshResult(refreshResult));
-    });
+    if (options.json) {
+      yield* writeJson({
+        command,
+        packageManager: manager,
+        service: serviceRefreshJson(refreshResult),
+        status: "ok",
+      });
+      return;
+    }
+
+    yield* humanLog("info", formatServiceRefreshResult(refreshResult), options);
   });
 }
 
@@ -186,6 +196,12 @@ function formatServiceRefreshResult(result: ServiceRefreshResult): string {
     case "refreshed":
       return "Service: refreshed.";
   }
+}
+
+function serviceRefreshJson(result: ServiceRefreshResult) {
+  return result._tag === "failed"
+    ? { status: result._tag, recoverable: true }
+    : { status: result._tag };
 }
 
 export {

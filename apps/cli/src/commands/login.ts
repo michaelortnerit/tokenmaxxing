@@ -10,9 +10,9 @@ import {
   ClockService,
   type CliConfig,
   ConfigService,
-  ConsoleService,
   TerminalService,
 } from "../services";
+import { humanLog, writeJson } from "../output";
 
 class StartCliLoginError extends Data.TaggedError("StartCliLoginError")<{
   readonly cause: unknown;
@@ -89,7 +89,6 @@ const loginCommand = Command.make(
 function loginEffect(options: { json: boolean }) {
   return Effect.gen(function* () {
     const config = yield* Effect.service(ConfigService);
-    const console = yield* Effect.service(ConsoleService);
 
     const stored = yield* config.readConfig();
     const envTokenActive = yield* config.hasEnvToken();
@@ -98,11 +97,9 @@ function loginEffect(options: { json: boolean }) {
     }
 
     const login = yield* browserLoginEffect(options);
-    yield* Effect.sync(() => {
-      if (options.json) {
-        console.log(JSON.stringify({ login: login.user.login, status: "ok" }));
-      }
-    });
+    if (options.json) {
+      yield* writeJson({ login: login.user.login, status: "ok" });
+    }
   });
 }
 
@@ -112,10 +109,7 @@ function browserLoginEffect(options: BrowserLoginOptions) {
     const clock = yield* Effect.service(ClockService);
     const config = yield* Effect.service(ConfigService);
     const clients = yield* Effect.service(ApiClientService);
-    const console = yield* Effect.service(ConsoleService);
     const terminal = yield* Effect.service(TerminalService);
-
-    const output = options.json ? { error: console.error, log: () => {} } : console;
 
     const stored = yield* config.readConfig();
     if (!(yield* terminal.isInteractive)) {
@@ -141,10 +135,8 @@ function browserLoginEffect(options: BrowserLoginOptions) {
       })
       .pipe(Effect.mapError((cause) => new StartCliLoginError({ cause })));
 
-    yield* Effect.sync(() => {
-      output.log(`Opening ${start.verificationUri}`);
-      output.log(`Code: ${start.code}`);
-    });
+    yield* humanLog("info", `Opening ${start.verificationUri}`, options);
+    yield* humanLog("info", `Code: ${start.code}`, options);
     if (canOpenBrowser) {
       const openResult = yield* browser.open(start.verificationUri).pipe(
         Effect.match({
@@ -157,12 +149,14 @@ function browserLoginEffect(options: BrowserLoginOptions) {
           return yield* Effect.fail(new OpenBrowserError({ cause: openResult.cause }));
         }
 
-        yield* Effect.sync(() =>
-          output.error("Could not open a browser automatically; open the URL above manually."),
+        yield* humanLog(
+          "error",
+          "Could not open a browser automatically; open the URL above manually.",
+          options,
         );
       }
     } else {
-      yield* Effect.sync(() => output.error("Open the URL above in your browser to continue."));
+      yield* humanLog("error", "Open the URL above in your browser to continue.", options);
     }
 
     for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt += 1) {
@@ -181,11 +175,7 @@ function browserLoginEffect(options: BrowserLoginOptions) {
           wwwUrl: stored.wwwUrl,
         };
 
-        yield* Effect.sync(() => {
-          if (!options.json) {
-            output.log(`Logged in as ${poll.user.login}.`);
-          }
-        });
+        yield* humanLog("success", `Logged in as ${poll.user.login}.`, options);
         return { config: nextConfig, user: poll.user };
       }
 

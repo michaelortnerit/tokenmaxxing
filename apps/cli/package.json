@@ -34,6 +34,9 @@
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --project tsconfig.json"
   },
+  "dependencies": {
+    "@clack/prompts": "catalog:"
+  },
   "devDependencies": {
     "@effect/platform-bun": "catalog:",
     "@tokenmaxxing/api-contract": "workspace:*",

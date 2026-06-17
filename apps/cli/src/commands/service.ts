@@ -10,7 +10,8 @@ import { Command, Flag } from "effect/unstable/cli";
 
 import { ClockService, ConfigService, ConsoleService } from "../services";
 import { getConfigPath } from "../services/config";
-import { resolveSyncAuth, syncEffect } from "./sync";
+import { humanLog, writeJson } from "../output";
+import { resolveSyncAuth, syncProgram } from "./sync";
 
 const execFilePromise = promisify(execFile);
 
@@ -48,6 +49,7 @@ interface ScheduleTime {
 interface ServiceInstallOptions {
   autoUpdate: boolean;
   force: boolean;
+  json?: boolean | undefined;
   refresh: boolean;
 }
 
@@ -105,6 +107,7 @@ interface ServiceMetadata {
 
 interface ServiceRunOptions {
   force: boolean;
+  json?: boolean | undefined;
   scheduled: boolean;
 }
 
@@ -130,6 +133,12 @@ type DoctorAuthConfig =
     };
 
 type DoctorStatus = "info" | "ok" | "warn";
+
+interface DoctorCheck {
+  detail: string;
+  label: string;
+  status: DoctorStatus;
+}
 
 class ServiceUnsupportedPlatformError extends Data.TaggedError("ServiceUnsupportedPlatformError")<{
   readonly platform: NodeJS.Platform;
@@ -201,23 +210,36 @@ const installCommand = Command.make(
     noAutoUpdate: Flag.boolean("no-auto-update").pipe(
       Flag.withDescription("Disable automatic CLI updates before scheduled syncs"),
     ),
+    json: Flag.boolean("json").pipe(Flag.withDescription("Output machine-readable JSON")),
     refresh: Flag.boolean("refresh").pipe(Flag.withHidden),
   },
-  ({ force, noAutoUpdate, refresh }) =>
-    serviceInstallEffect({ autoUpdate: !noAutoUpdate, force, refresh }),
+  ({ force, json, noAutoUpdate, refresh }) =>
+    serviceInstallEffect({ autoUpdate: !noAutoUpdate, force, json, refresh }),
 ).pipe(Command.withDescription("Install daily automatic sync"));
 
-const uninstallCommand = Command.make("uninstall", {}, () => serviceUninstallEffect()).pipe(
-  Command.withDescription("Uninstall daily automatic sync"),
-);
+const uninstallCommand = Command.make(
+  "uninstall",
+  {
+    json: Flag.boolean("json").pipe(Flag.withDescription("Output machine-readable JSON")),
+  },
+  ({ json }) => serviceUninstallEffect({ json }),
+).pipe(Command.withDescription("Uninstall daily automatic sync"));
 
-const statusCommand = Command.make("status", {}, () => serviceStatusEffect()).pipe(
-  Command.withDescription("Show automatic sync service status"),
-);
+const statusCommand = Command.make(
+  "status",
+  {
+    json: Flag.boolean("json").pipe(Flag.withDescription("Output machine-readable JSON")),
+  },
+  ({ json }) => serviceStatusEffect({ json }),
+).pipe(Command.withDescription("Show automatic sync service status"));
 
-const doctorCommand = Command.make("doctor", {}, () => serviceDoctorEffect()).pipe(
-  Command.withDescription("Check automatic sync service health"),
-);
+const doctorCommand = Command.make(
+  "doctor",
+  {
+    json: Flag.boolean("json").pipe(Flag.withDescription("Output machine-readable JSON")),
+  },
+  ({ json }) => serviceDoctorEffect({ json }),
+).pipe(Command.withDescription("Check automatic sync service health"));
 
 const runCommand = Command.make(
   "run",
@@ -225,9 +247,10 @@ const runCommand = Command.make(
     force: Flag.boolean("force").pipe(
       Flag.withDescription("Run even if the last scheduled sync recently succeeded"),
     ),
+    json: Flag.boolean("json").pipe(Flag.withDescription("Output machine-readable JSON")),
     scheduled: Flag.boolean("scheduled").pipe(Flag.withHidden),
   },
-  ({ force, scheduled }) => serviceRunEffect({ force, scheduled }),
+  ({ force, json, scheduled }) => serviceRunEffect({ force, json, scheduled }),
 ).pipe(Command.withDescription("Run the automatic sync job now"));
 
 const serviceCommand = Command.make("service").pipe(
@@ -263,14 +286,13 @@ function serviceInstallProgram(
 ) {
   return Effect.gen(function* () {
     const config = yield* Effect.service(ConfigService);
-    const console = yield* Effect.service(ConsoleService);
 
     if (!options.refresh && (yield* config.hasEnvToken())) {
       return yield* Effect.fail(new ServiceEnvTokenError());
     }
 
     if (!options.refresh) {
-      yield* resolveSyncAuth({ json: false });
+      yield* resolveSyncAuth({ json: options.json === true });
     }
 
     const env = runtime.env ?? process.env;
@@ -321,25 +343,44 @@ function serviceInstallProgram(
       Effect.mapError((cause) => new ServiceInstallError({ cause })),
     );
 
-    yield* Effect.sync(() => {
-      console.log("Automatic sync installed.");
-      console.log(`Schedule: ${scheduleDescription()}`);
-      console.log(`Backend: ${paths.backend}`);
-      console.log(`Log: ${paths.logPath}`);
-      console.log(
-        `Auto-update: ${options.autoUpdate ? `enabled via ${commandInstall.autoUpdateManager}` : "disabled"}${
-          options.autoUpdate
-            ? ` (${autoUpdateCommandDescription(commandInstall.autoUpdateManager!)})`
-            : ""
-        }`,
-      );
-    });
+    const autoUpdate = {
+      enabled: options.autoUpdate,
+      manager: commandInstall.autoUpdateManager,
+      ...(options.autoUpdate
+        ? { command: autoUpdateCommandDescription(commandInstall.autoUpdateManager!) }
+        : {}),
+    };
+
+    if (options.json) {
+      yield* writeJson({
+        autoUpdate,
+        backend: paths.backend,
+        logPath: paths.logPath,
+        schedule: scheduleDescription(),
+        status: "ok",
+        wrapperPath: paths.wrapperPath,
+      });
+      return;
+    }
+
+    yield* humanLog("success", "Automatic sync installed.", options);
+    yield* humanLog("info", `Schedule: ${scheduleDescription()}`, options);
+    yield* humanLog("info", `Backend: ${paths.backend}`, options);
+    yield* humanLog("info", `Log: ${paths.logPath}`, options);
+    yield* humanLog(
+      "info",
+      `Auto-update: ${options.autoUpdate ? `enabled via ${commandInstall.autoUpdateManager}` : "disabled"}${
+        options.autoUpdate
+          ? ` (${autoUpdateCommandDescription(commandInstall.autoUpdateManager!)})`
+          : ""
+      }`,
+      options,
+    );
   });
 }
 
-function serviceUninstallEffect() {
+function serviceUninstallEffect(options: { json?: boolean | undefined } = {}) {
   return Effect.gen(function* () {
-    const console = yield* Effect.service(ConsoleService);
     const paths = yield* servicePathsEffect();
 
     yield* uninstallNativeScheduler(paths).pipe(
@@ -349,14 +390,17 @@ function serviceUninstallEffect() {
       Effect.mapError((cause) => new ServiceUninstallError({ cause })),
     );
 
-    yield* Effect.sync(() => {
-      console.log("Automatic sync uninstalled.");
-      console.log("Auth and synced usage were left untouched.");
-    });
+    if (options.json) {
+      yield* writeJson({ removed: true, status: "ok" });
+      return;
+    }
+
+    yield* humanLog("success", "Automatic sync uninstalled.", options);
+    yield* humanLog("info", "Auth and synced usage were left untouched.", options);
   });
 }
 
-function serviceStatusEffect() {
+function serviceStatusEffect(options: { json?: boolean | undefined } = {}) {
   return Effect.gen(function* () {
     const console = yield* Effect.service(ConsoleService);
     const paths = yield* servicePathsEffect();
@@ -365,21 +409,40 @@ function serviceStatusEffect() {
     const installed = yield* isServiceInstalled(paths);
     const now = new Date();
     const lockStatus = yield* readServiceLockStatus(paths.lockPath, now);
+    const status = {
+      autoUpdate: formatServiceStatusAutoUpdate(metadata),
+      backend: paths.backend,
+      installed,
+      lastError: state?.lastError,
+      lastSuccessAt: state?.lastSuccessAt ?? null,
+      lastSuccessDate: serviceLastSuccessDate(state) ?? null,
+      lock: formatServiceLockStatus(lockStatus),
+      logPath: paths.logPath,
+      schedule: metadata?.schedule ?? scheduleDescription(),
+      status: "ok",
+      todaySynced: shouldSkipServiceRun(state, now),
+      wrapperPath: paths.wrapperPath,
+    };
+
+    if (options.json) {
+      yield* writeJson(status);
+      return;
+    }
 
     yield* Effect.sync(() => {
-      console.log(`Installed: ${installed ? "yes" : "no"}`);
-      console.log(`Backend: ${paths.backend}`);
-      console.log(`Schedule: ${metadata?.schedule ?? scheduleDescription()}`);
-      console.log(`Auto-update: ${formatServiceStatusAutoUpdate(metadata)}`);
-      console.log(`Last success: ${state?.lastSuccessAt ?? "never"}`);
-      console.log(`Last success date: ${serviceLastSuccessDate(state) ?? "never"}`);
-      console.log(`Today synced: ${shouldSkipServiceRun(state, now) ? "yes" : "no"}`);
-      if (state?.lastError !== undefined) {
-        console.log(`Last error: ${state.lastError}`);
+      console.log(`Installed: ${status.installed ? "yes" : "no"}`);
+      console.log(`Backend: ${status.backend}`);
+      console.log(`Schedule: ${status.schedule}`);
+      console.log(`Auto-update: ${status.autoUpdate}`);
+      console.log(`Last success: ${status.lastSuccessAt ?? "never"}`);
+      console.log(`Last success date: ${status.lastSuccessDate ?? "never"}`);
+      console.log(`Today synced: ${status.todaySynced ? "yes" : "no"}`);
+      if (status.lastError !== undefined) {
+        console.log(`Last error: ${status.lastError}`);
       }
-      console.log(`Lock: ${formatServiceLockStatus(lockStatus)}`);
-      console.log(`Wrapper: ${paths.wrapperPath}`);
-      console.log(`Log: ${paths.logPath}`);
+      console.log(`Lock: ${status.lock}`);
+      console.log(`Wrapper: ${status.wrapperPath}`);
+      console.log(`Log: ${status.logPath}`);
     });
   });
 }
@@ -393,19 +456,32 @@ function serviceRunEffect(options: ServiceRunOptions) {
     );
 
     if (lock._tag === "locked") {
-      yield* Effect.sync(() => {
-        console.log(formatServiceLockSkip(lock.status));
-      });
+      const message = formatServiceLockSkip(lock.status);
+      if (options.json) {
+        yield* writeJson({
+          lock: formatServiceLockStatus(lock.status),
+          reason: "locked",
+          status: "skipped",
+        });
+      } else if (!options.scheduled) {
+        yield* Effect.sync(() => {
+          console.log(message);
+        });
+      }
       return;
     }
 
-    return yield* runServiceSyncOnce(paths, options).pipe(
+    const result = yield* runServiceSyncOnce(paths, options).pipe(
       Effect.ensuring(releaseServiceRunLock(paths.lockPath, lock.lock.ownerId)),
     );
+
+    if (options.json && !options.scheduled) {
+      yield* writeJson(result);
+    }
   });
 }
 
-function serviceDoctorEffect() {
+function serviceDoctorEffect(options: { json?: boolean | undefined } = {}) {
   return Effect.gen(function* () {
     const config = yield* Effect.service(ConfigService);
     const console = yield* Effect.service(ConsoleService);
@@ -441,65 +517,70 @@ function serviceDoctorEffect() {
     const lockStatus = yield* readServiceLockStatus(paths.lockPath, now);
     const logTail = yield* readLogTail(paths.logPath, 8);
 
-    const lines = [
-      doctorLine(
+    const checks = [
+      doctorCheck(
         installed ? "ok" : "warn",
         "scheduler",
         installed ? `installed (${paths.backend})` : `not installed (${paths.backend})`,
       ),
-      doctorLine(
+      doctorCheck(
         definitionExists ? "ok" : "warn",
         "definition",
         paths.definitionPath ?? "tracked by Windows Task Scheduler metadata",
       ),
-      doctorLine(wrapperExists ? "ok" : "warn", "wrapper", paths.wrapperPath),
-      doctorLine(metadata === null ? "warn" : "ok", "metadata", paths.metadataPath),
-      doctorLine(
+      doctorCheck(wrapperExists ? "ok" : "warn", "wrapper", paths.wrapperPath),
+      doctorCheck(metadata === null ? "warn" : "ok", "metadata", paths.metadataPath),
+      doctorCheck(
         envToken ? "warn" : authConfig._tag === "success" && authConfig.value.token ? "ok" : "warn",
         "auth",
         doctorAuthDetail(envToken, authConfig),
       ),
-      doctorLine(
+      doctorCheck(
         metadataCommandExists ? "ok" : currentCommand === null ? "warn" : "ok",
         "binary",
         doctorBinaryDetail(metadata, metadataCommandExists, currentCommand),
       ),
-      doctorLine(
+      doctorCheck(
         doctorAutoUpdateStatus(metadata, autoUpdateManagerExists),
         "auto-update",
         doctorAutoUpdateDetail(metadata, autoUpdateManager, autoUpdateManagerExists),
       ),
-      doctorLine(
+      doctorCheck(
         lockStatus.locked && !lockStatus.stale ? "warn" : "ok",
         "lock",
         formatServiceLockStatus(lockStatus),
       ),
-      doctorLine(
+      doctorCheck(
         state?.lastSuccessAt === undefined ? "info" : "ok",
         "last success",
         state?.lastSuccessAt ?? "never",
       ),
-      doctorLine(
+      doctorCheck(
         serviceLastSuccessDate(state) === undefined ? "info" : "ok",
         "success date",
         serviceLastSuccessDate(state) ?? "never",
       ),
-      doctorLine(
+      doctorCheck(
         shouldSkipServiceRun(state, now) ? "ok" : "info",
         "today synced",
         shouldSkipServiceRun(state, now) ? "yes" : "no",
       ),
-      doctorLine(
+      doctorCheck(
         state?.lastError === undefined ? "ok" : "warn",
         "last error",
         state?.lastError ?? "none",
       ),
     ];
 
+    if (options.json) {
+      yield* writeJson({ checks, recentLog: logTail, status: "ok" });
+      return;
+    }
+
     yield* Effect.sync(() => {
       console.log("Service doctor");
-      for (const line of lines) {
-        console.log(line);
+      for (const check of checks) {
+        console.log(doctorLine(check));
       }
 
       if (logTail.length > 0) {
@@ -523,10 +604,17 @@ function runServiceSyncOnce(paths: ServicePaths, options: ServiceRunOptions) {
     const now = new Date();
 
     if (!options.force && shouldSkipServiceRun(state, now)) {
-      yield* Effect.sync(() => {
-        console.log("Sync skipped; today already synced.");
-      });
-      return;
+      if (!options.json && !options.scheduled) {
+        yield* Effect.sync(() => {
+          console.log("Sync skipped; today already synced.");
+        });
+      }
+
+      return {
+        logPath: paths.logPath,
+        reason: "already_synced" as const,
+        status: "skipped" as const,
+      };
     }
 
     if (options.scheduled) {
@@ -539,7 +627,7 @@ function runServiceSyncOnce(paths: ServicePaths, options: ServiceRunOptions) {
     }
 
     const metadata = yield* readServiceMetadata(paths.metadataPath);
-    const autoUpdated = yield* runServiceAutoUpdate(metadata);
+    const autoUpdated = yield* runServiceAutoUpdate(metadata, { json: options.json });
 
     yield* writeServiceState(paths.statePath, {
       ...currentState,
@@ -548,10 +636,10 @@ function runServiceSyncOnce(paths: ServicePaths, options: ServiceRunOptions) {
       version: 1,
     }).pipe(Effect.mapError((cause) => new ServiceRunError({ cause })));
 
-    const result = yield* syncEffect({ dryRun: false, json: true }).pipe(
+    const result = yield* syncProgram({ dryRun: false, json: true, silent: true }).pipe(
       Effect.match({
         onFailure: (cause) => ({ _tag: "failure" as const, cause }),
-        onSuccess: () => ({ _tag: "success" as const }),
+        onSuccess: (value) => ({ _tag: "success" as const, value }),
       }),
     );
 
@@ -580,19 +668,29 @@ function runServiceSyncOnce(paths: ServicePaths, options: ServiceRunOptions) {
         commandPath: metadata.commandPath,
       }).pipe(
         Effect.catch(() =>
-          Effect.sync(() => {
-            console.log("Service refresh failed after auto-update.");
-          }),
+          options.json
+            ? Effect.void
+            : Effect.sync(() => {
+                console.log("Service refresh failed after auto-update.");
+              }),
         ),
       );
     }
 
-    if (!options.scheduled) {
+    if (!options.json && !options.scheduled) {
       yield* Effect.sync(() => {
         console.log("Service run complete.");
         console.log(`Log: ${paths.logPath}`);
       });
     }
+
+    return {
+      autoUpdated,
+      logPath: paths.logPath,
+      rows: result.value.rows,
+      status: "ok" as const,
+      upserted: result.value.upserted ?? 0,
+    };
   });
 }
 
@@ -816,6 +914,7 @@ function commandExists(command: string): Effect.Effect<boolean, never> {
 
 function runServiceAutoUpdate(
   metadata: ServiceMetadata | null,
+  options: { json?: boolean | undefined } = {},
 ): Effect.Effect<boolean, never, ConsoleService> {
   return Effect.gen(function* () {
     const console = yield* Effect.service(ConsoleService);
@@ -826,27 +925,33 @@ function runServiceAutoUpdate(
 
     const manager = metadata.autoUpdateManager;
     if (manager === undefined || manager === null) {
-      yield* Effect.sync(() => {
-        console.log("Auto-update skipped; package manager was not detected.");
-      });
+      if (!options.json) {
+        yield* Effect.sync(() => {
+          console.log("Auto-update skipped; package manager was not detected.");
+        });
+      }
       return false;
     }
 
     const managerExists = yield* commandExists(manager);
     if (!managerExists) {
-      yield* Effect.sync(() => {
-        console.log(`Auto-update skipped; ${manager} not found.`);
-      });
+      if (!options.json) {
+        yield* Effect.sync(() => {
+          console.log(`Auto-update skipped; ${manager} not found.`);
+        });
+      }
       return false;
     }
 
     return yield* runPackageManagerUpdate(manager).pipe(
       Effect.as(true),
       Effect.catch(() =>
-        Effect.sync(() => {
-          console.log(`Auto-update failed; continuing with sync.`);
-          return false;
-        }),
+        options.json
+          ? Effect.succeed(false)
+          : Effect.sync(() => {
+              console.log(`Auto-update failed; continuing with sync.`);
+              return false;
+            }),
       ),
     );
   });
@@ -884,8 +989,12 @@ function readLogTail(path: string, maxLines: number): Effect.Effect<string[], ne
   }).pipe(Effect.catch(() => Effect.succeed([])));
 }
 
-function doctorLine(status: DoctorStatus, label: string, detail: string): string {
-  return `${status.toUpperCase().padEnd(4)} ${label.padEnd(12)} ${detail}`;
+function doctorCheck(status: DoctorStatus, label: string, detail: string): DoctorCheck {
+  return { detail, label, status };
+}
+
+function doctorLine(check: DoctorCheck): string {
+  return `${check.status.toUpperCase().padEnd(4)} ${check.label.padEnd(12)} ${check.detail}`;
 }
 
 function formatServiceStatusAutoUpdate(metadata: ServiceMetadata | null): string {

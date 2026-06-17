@@ -33,6 +33,22 @@ describe("root command", () => {
     expect(result.output).toContain('Unknown subcommand "update"');
     expect(result.output).toContain("upgrade    Upgrade the globally installed CLI");
   });
+
+  it("exposes --json on all service subcommands and upgrade", () => {
+    for (const args of [
+      ["upgrade", "--help"],
+      ["service", "install", "--help"],
+      ["service", "uninstall", "--help"],
+      ["service", "status", "--help"],
+      ["service", "doctor", "--help"],
+      ["service", "run", "--help"],
+    ]) {
+      const result = runCli(args);
+
+      expect(result.status).toBe(0);
+      expect(result.output).toContain("--json");
+    }
+  });
 });
 
 export {};

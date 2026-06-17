@@ -5,7 +5,7 @@ import * as BunServices from "@effect/platform-bun/BunServices";
 import { Effect, Layer } from "effect";
 
 import { runTokenmaxxingCommand } from "./commands/root";
-import { isVerboseArgv, renderCliFailure } from "./errors";
+import { isJsonArgv, isVerboseArgv, renderCliFailure } from "./errors";
 import { CliServicesLive } from "./services";
 
 function mainEffect(argv = process.argv.slice(2)) {
@@ -14,6 +14,7 @@ function mainEffect(argv = process.argv.slice(2)) {
   return runTokenmaxxingCommand(normalizedArgv).pipe(
     Effect.tapCause((cause) =>
       renderCliFailure(cause, {
+        json: isJsonArgv(normalizedArgv),
         verbose: isVerboseArgv(normalizedArgv),
       }),
     ),

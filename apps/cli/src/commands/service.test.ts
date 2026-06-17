@@ -597,6 +597,31 @@ describe("serviceInstallProgram", () => {
     expect(installed).toEqual([]);
   });
 
+  it("does not start browser login when service install runs with --json", async () => {
+    const { layer, state } = makeTestLayer({
+      initialConfig: {
+        apiUrl: "https://api.tokenmaxxing.example",
+        wwwUrl: "https://tokenmaxxing.example",
+      },
+    });
+    const { installed, runtime, written } = makeInstallRuntime();
+
+    const exit = await Effect.runPromiseExit(
+      serviceInstallProgram(
+        { autoUpdate: true, force: false, json: true, refresh: false },
+        runtime,
+      ).pipe(Effect.provide(layer)),
+    );
+
+    expect(exit._tag).toBe("Failure");
+    expect(failureTag(exit)).toBe("NotLoggedInError");
+    expect(state.browserUrls).toEqual([]);
+    expect(state.logs).toEqual([]);
+    expect(state.writtenTokens).toEqual([]);
+    expect(written).toEqual([]);
+    expect(installed).toEqual([]);
+  });
+
   it("refreshes service files without starting login", async () => {
     const { layer, state } = makeTestLayer({
       initialConfig: {

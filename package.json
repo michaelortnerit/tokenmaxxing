@@ -8,6 +8,7 @@
     ],
     "catalog": {
       "@base-ui-components/react": "1.0.0-rc.0",
+      "@clack/prompts": "1.5.1",
       "@cloudflare/workers-types": "4.20260609.1",
       "@effect/platform-bun": "4.0.0-beta.78",
       "@effect/platform-node": "4.0.0-beta.78",
