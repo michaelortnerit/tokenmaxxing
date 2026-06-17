@@ -26,7 +26,7 @@ import {
   TerminalService,
   type TokenmaxxingApiClient,
 } from "../services";
-import { humanFrame, humanLog, humanSpinner, writeJson } from "../output";
+import { formatUrl, humanFrame, humanLog, humanSpinner, writeJson } from "../output";
 import { browserLoginEffect } from "./login";
 import { NotLoggedInError } from "./whoami";
 
@@ -381,7 +381,7 @@ function renderSyncTable(
 function renderSyncSuccess(profileUrl: string, options: FormatOptions = {}): string {
   const styles = makeStyles(options);
 
-  return `${styles.synced("Sync complete.")}\nProfile: ${styles.link(profileUrl)}`;
+  return `${styles.synced("Sync complete.")}\nProfile: ${formatUrl(profileUrl, options)}`;
 }
 
 function renderTable(
@@ -417,7 +417,6 @@ function visibleLength(value: string): number {
 }
 
 function makeStyles(options: FormatOptions = {}): {
-  link: Style;
   muted: Style;
   skipped: Style;
   synced: Style;
@@ -426,7 +425,6 @@ function makeStyles(options: FormatOptions = {}): {
   const colors = !Object.prototype.hasOwnProperty.call(env, "NO_COLOR");
 
   return {
-    link: (value) => (colors ? `\x1b[36;4m${value}\x1b[0m` : value),
     muted: (value) => (colors ? `\x1b[2m${value}\x1b[0m` : value),
     skipped: (value) => (colors ? `\x1b[33m${value}\x1b[0m` : value),
     synced: (value) => (colors ? `\x1b[32m${value}\x1b[0m` : value),

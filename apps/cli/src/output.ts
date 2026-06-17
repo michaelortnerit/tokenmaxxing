@@ -8,6 +8,10 @@ interface HumanOutputOptions {
   silent?: boolean;
 }
 
+interface FormatUrlOptions {
+  env?: Record<string, string | undefined>;
+}
+
 type HumanLogLevel = "error" | "info" | "step" | "success" | "warn";
 
 interface HumanSpinner {
@@ -21,6 +25,11 @@ function writeJson(value: unknown) {
 
     yield* Effect.sync(() => output.log(JSON.stringify(value)));
   });
+}
+
+function formatUrl(url: string, options: FormatUrlOptions = {}): string {
+  const env = options.env ?? process.env;
+  return Object.prototype.hasOwnProperty.call(env, "NO_COLOR") ? url : `\x1b[36;4m${url}\x1b[0m`;
 }
 
 function humanIntro(title: string, options: HumanOutputOptions = {}) {
@@ -160,6 +169,7 @@ function shouldUseClack(): boolean {
 }
 
 export {
+  formatUrl,
   humanFrame,
   humanIntro,
   humanLog,
@@ -171,4 +181,4 @@ export {
   writeJson,
 };
 
-export type { HumanOutputOptions, HumanSpinner };
+export type { FormatUrlOptions, HumanOutputOptions, HumanSpinner };

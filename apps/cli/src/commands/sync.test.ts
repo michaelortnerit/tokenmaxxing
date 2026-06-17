@@ -265,6 +265,8 @@ describe("resolveSyncAuth", () => {
   });
 
   it("starts browser login and returns fresh auth for human sync when no token exists", async () => {
+    const originalNoColor = process.env.NO_COLOR;
+    delete process.env.NO_COLOR;
     const { layer, state } = makeTestLayer({
       initialConfig: {
         apiUrl: "https://api.tokenmaxxing.example",
@@ -272,25 +274,36 @@ describe("resolveSyncAuth", () => {
       },
     });
 
-    const exit = await Effect.runPromiseExit(
-      resolveSyncAuth({ json: false }).pipe(Effect.provide(layer)),
-    );
+    try {
+      const exit = await Effect.runPromiseExit(
+        resolveSyncAuth({ json: false }).pipe(Effect.provide(layer)),
+      );
 
-    expect(exit._tag).toBe("Success");
-    if (exit._tag !== "Success") {
-      throw new Error("expected resolveSyncAuth to succeed");
+      expect(exit._tag).toBe("Success");
+      if (exit._tag !== "Success") {
+        throw new Error("expected resolveSyncAuth to succeed");
+      }
+
+      const auth = exit.value;
+      expect(auth.config.token).toBe("tmx_new");
+      expect(auth.user.login).toBe("alex");
+      expect(state.browserUrls).toEqual(["https://tokenmaxxing.example/login/cli?code=ABC123"]);
+      expect(state.writtenTokens).toEqual(["tmx_new"]);
+      expect(state.madeClients).toEqual([
+        { baseUrl: "https://api.tokenmaxxing.example" },
+        { baseUrl: "https://api.tokenmaxxing.example", token: "tmx_new" },
+      ]);
+      expect(state.logs).toContain("Not logged in; starting browser login.");
+      expect(state.logs).toContain(
+        "Opening \x1b[36;4mhttps://tokenmaxxing.example/login/cli?code=ABC123\x1b[0m",
+      );
+    } finally {
+      if (originalNoColor === undefined) {
+        delete process.env.NO_COLOR;
+      } else {
+        process.env.NO_COLOR = originalNoColor;
+      }
     }
-
-    const auth = exit.value;
-    expect(auth.config.token).toBe("tmx_new");
-    expect(auth.user.login).toBe("alex");
-    expect(state.browserUrls).toEqual(["https://tokenmaxxing.example/login/cli?code=ABC123"]);
-    expect(state.writtenTokens).toEqual(["tmx_new"]);
-    expect(state.madeClients).toEqual([
-      { baseUrl: "https://api.tokenmaxxing.example" },
-      { baseUrl: "https://api.tokenmaxxing.example", token: "tmx_new" },
-    ]);
-    expect(state.logs).toContain("Not logged in; starting browser login.");
   });
 
   it("skips external browser launch in interactive headless shells and completes manual login", async () => {

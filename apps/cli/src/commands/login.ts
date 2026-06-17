@@ -12,7 +12,7 @@ import {
   ConfigService,
   TerminalService,
 } from "../services";
-import { humanFrame, humanLog, writeJson } from "../output";
+import { formatUrl, humanFrame, humanLog, writeJson } from "../output";
 
 class StartCliLoginError extends Data.TaggedError("StartCliLoginError")<{
   readonly cause: unknown;
@@ -139,7 +139,7 @@ function browserLoginEffect(options: BrowserLoginOptions) {
       })
       .pipe(Effect.mapError((cause) => new StartCliLoginError({ cause })));
 
-    yield* humanLog("info", `Opening ${start.verificationUri}`, options);
+    yield* humanLog("info", `Opening ${formatUrl(start.verificationUri)}`, options);
     yield* humanLog("info", `Code: ${start.code}`, options);
     if (canOpenBrowser) {
       const openResult = yield* browser.open(start.verificationUri).pipe(

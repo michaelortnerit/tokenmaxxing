@@ -2,7 +2,7 @@ import { Effect, Layer } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ConsoleService } from "./services";
-import { humanFrame, humanLog } from "./output";
+import { formatUrl, humanFrame, humanLog } from "./output";
 
 const promptCalls = vi.hoisted((): string[] => []);
 
@@ -166,6 +166,20 @@ describe("humanFrame", () => {
 
     expect(promptCalls).toEqual([]);
     expect(logs).toEqual([]);
+  });
+});
+
+describe("formatUrl", () => {
+  it("highlights URLs", () => {
+    expect(formatUrl("https://tokenmaxxing.sh", { env: {} })).toBe(
+      "\x1b[36;4mhttps://tokenmaxxing.sh\x1b[0m",
+    );
+  });
+
+  it("respects NO_COLOR", () => {
+    expect(formatUrl("https://tokenmaxxing.sh", { env: { NO_COLOR: "" } })).toBe(
+      "https://tokenmaxxing.sh",
+    );
   });
 });
 
