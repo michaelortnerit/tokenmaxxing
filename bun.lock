@@ -38,7 +38,7 @@
     },
     "apps/cli": {
       "name": "@851-labs/tokenmaxxing",
-      "version": "0.4.2",
+      "version": "0.4.3",
       "bin": {
         "tokenmaxxing": "dist/index.js",
       },
