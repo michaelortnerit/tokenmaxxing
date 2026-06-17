@@ -97,11 +97,11 @@ function ProfileDashboard({ rows, stats }: { rows: readonly DailyRow[]; stats: D
 
   return (
     <div className="-mx-4 grid grid-cols-1 gap-px border-y border-border bg-border">
-      <div className="grid grid-cols-2 gap-px bg-border md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-px bg-border lg:grid-cols-4">
         <StatCard label="Total spend" value={formatUsd(stats.totalSpendUsd)} />
         <StatCard label="Total tokens" value={formatTokens(stats.totalTokens)} />
         <StatCard label="Sessions" value={formatCount(stats.sessionCount)} />
-        <div aria-hidden="true" className="hidden bg-card md:block" />
+        <div aria-hidden="true" className="order-last bg-card" />
         <StatCard
           label="Top model"
           value={stats.topModel === null ? "—" : modelFamily(stats.topModel.model)}
