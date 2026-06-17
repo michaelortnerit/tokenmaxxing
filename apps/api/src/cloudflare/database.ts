@@ -2,8 +2,10 @@ import { RemovalPolicy } from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Stack } from "alchemy/Stack";
 
+import { stageNameForResource } from "./stage";
+
 function databaseNameForStage(stage: string): string {
-  return `tokenmaxxing-${stage}`;
+  return `tokenmaxxing-${stageNameForResource(stage)}`;
 }
 
 const Database = Cloudflare.D1Database(
