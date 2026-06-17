@@ -42,10 +42,8 @@
       "bin": {
         "tokenmaxxing": "dist/index.js",
       },
-      "dependencies": {
-        "@clack/prompts": "1.5.1",
-      },
       "devDependencies": {
+        "@clack/prompts": "catalog:",
         "@effect/platform-bun": "catalog:",
         "@tokenmaxxing/api-contract": "workspace:*",
         "@types/bun": "catalog:",
