@@ -20,9 +20,8 @@ tokenmaxxing service install    # optional: sync automatically every day
 You can also install globally with `bun install -g`, `pnpm add -g`, or
 `yarn global add`.
 
-The background service uses the global `tokenmaxxing` binary, runs at 09:00,
-13:00, 17:00, and 21:00 local time, and skips duplicate attempts when a sync
-already succeeded in the last three hours. By default it auto-updates through
+The background service uses the global `tokenmaxxing` binary, checks hourly,
+and syncs at most once per local day. By default it auto-updates through
 the package manager that installed the global binary (bun, npm, pnpm, or yarn);
 pass `--no-auto-update` to `service install` if you want to update manually.
 Use `tokenmaxxing service status` for the last run and `tokenmaxxing service

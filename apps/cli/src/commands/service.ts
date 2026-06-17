@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 import { Data, Effect } from "effect";
 import { Command, Flag } from "effect/unstable/cli";
 
-import { ConfigService, ConsoleService } from "../services";
+import { ClockService, ConfigService, ConsoleService } from "../services";
 import { getConfigPath } from "../services/config";
 import { resolveSyncAuth, syncEffect } from "./sync";
 
@@ -22,8 +22,9 @@ const LEGACY_POSIX_WRAPPER_NAME = "service-sync.sh";
 const WINDOWS_WRAPPER_NAME = "service-sync.cmd";
 const PACKAGE_NAME = "@851-labs/tokenmaxxing";
 const SERVICE_LOCK_STALE_MS = 2 * 60 * 60 * 1000;
-const SERVICE_NOOP_WINDOW_MS = 3 * 60 * 60 * 1000;
-const SCHEDULE_TIMES: readonly ScheduleTime[] = [
+const SERVICE_INTERVAL_SECONDS = 60 * 60;
+const SERVICE_JITTER_MAX_MS = 10 * 60 * 1000;
+const LEGACY_SCHEDULE_TIMES: readonly ScheduleTime[] = [
   { hour: 9, minute: 0 },
   { hour: 13, minute: 0 },
   { hour: 17, minute: 0 },
@@ -110,6 +111,7 @@ interface ServiceState {
   lastAttemptAt?: string;
   lastError?: string;
   lastSuccessAt?: string;
+  lastSuccessDate?: string;
   version: 1;
 }
 
@@ -356,7 +358,8 @@ function serviceStatusEffect() {
     const metadata = yield* readServiceMetadata(paths.metadataPath);
     const state = yield* readServiceState(paths.statePath);
     const installed = yield* isServiceInstalled(paths);
-    const lockStatus = yield* readServiceLockStatus(paths.lockPath, new Date());
+    const now = new Date();
+    const lockStatus = yield* readServiceLockStatus(paths.lockPath, now);
 
     yield* Effect.sync(() => {
       console.log(`Installed: ${installed ? "yes" : "no"}`);
@@ -364,6 +367,8 @@ function serviceStatusEffect() {
       console.log(`Schedule: ${metadata?.schedule ?? scheduleDescription()}`);
       console.log(`Auto-update: ${formatServiceStatusAutoUpdate(metadata)}`);
       console.log(`Last success: ${state?.lastSuccessAt ?? "never"}`);
+      console.log(`Last success date: ${serviceLastSuccessDate(state) ?? "never"}`);
+      console.log(`Today synced: ${shouldSkipServiceRun(state, now) ? "yes" : "no"}`);
       if (state?.lastError !== undefined) {
         console.log(`Last error: ${state.lastError}`);
       }
@@ -470,6 +475,16 @@ function serviceDoctorEffect() {
         state?.lastSuccessAt ?? "never",
       ),
       doctorLine(
+        serviceLastSuccessDate(state) === undefined ? "info" : "ok",
+        "success date",
+        serviceLastSuccessDate(state) ?? "never",
+      ),
+      doctorLine(
+        shouldSkipServiceRun(state, now) ? "ok" : "info",
+        "today synced",
+        shouldSkipServiceRun(state, now) ? "yes" : "no",
+      ),
+      doctorLine(
         state?.lastError === undefined ? "ok" : "warn",
         "last error",
         state?.lastError ?? "none",
@@ -495,6 +510,8 @@ function serviceDoctorEffect() {
 
 function runServiceSyncOnce(paths: ServicePaths, options: ServiceRunOptions) {
   return Effect.gen(function* () {
+    const clock = yield* Effect.service(ClockService);
+    const config = yield* Effect.service(ConfigService);
     const console = yield* Effect.service(ConsoleService);
     const state = yield* readServiceState(paths.statePath);
     const currentState = state ?? { version: 1 as const };
@@ -502,9 +519,18 @@ function runServiceSyncOnce(paths: ServicePaths, options: ServiceRunOptions) {
 
     if (!options.force && shouldSkipServiceRun(state, now)) {
       yield* Effect.sync(() => {
-        console.log("Sync skipped; last successful service sync was less than 3 hours ago.");
+        console.log("Sync skipped; today already synced.");
       });
       return;
+    }
+
+    if (options.scheduled) {
+      const stored = yield* config.readConfig();
+      const jitterMs =
+        stored.deviceId === undefined ? 0 : deterministicServiceJitterMs(stored.deviceId);
+      if (jitterMs > 0) {
+        yield* clock.sleep(jitterMs).pipe(Effect.catch(() => Effect.void));
+      }
     }
 
     const metadata = yield* readServiceMetadata(paths.metadataPath);
@@ -539,6 +565,7 @@ function runServiceSyncOnce(paths: ServicePaths, options: ServiceRunOptions) {
       ...currentState,
       lastAttemptAt: now.toISOString(),
       lastSuccessAt: successAt,
+      lastSuccessDate: localDateKey(new Date(successAt)),
       version: 1,
     }).pipe(Effect.mapError((cause) => new ServiceRunError({ cause })));
 
@@ -552,16 +579,39 @@ function runServiceSyncOnce(paths: ServicePaths, options: ServiceRunOptions) {
 }
 
 function shouldSkipServiceRun(state: ServiceState | null, now: Date): boolean {
+  return serviceLastSuccessDate(state) === localDateKey(now);
+}
+
+function serviceLastSuccessDate(state: ServiceState | null): string | undefined {
+  if (state?.lastSuccessDate !== undefined) {
+    return state.lastSuccessDate;
+  }
+
   if (state?.lastSuccessAt === undefined) {
-    return false;
+    return undefined;
   }
 
-  const lastSuccessAt = Date.parse(state.lastSuccessAt);
-  if (Number.isNaN(lastSuccessAt)) {
-    return false;
+  const lastSuccessAt = new Date(state.lastSuccessAt);
+
+  return Number.isNaN(lastSuccessAt.getTime()) ? undefined : localDateKey(lastSuccessAt);
+}
+
+function localDateKey(date: Date): string {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+function deterministicServiceJitterMs(seed: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash ^= seed.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
   }
 
-  return now.getTime() - lastSuccessAt < SERVICE_NOOP_WINDOW_MS;
+  return Math.abs(hash >>> 0) % (SERVICE_JITTER_MAX_MS + 1);
 }
 
 function acquireServiceRunLock(path: string, now: Date): Effect.Effect<ServiceRunLock, unknown> {
@@ -734,6 +784,7 @@ function serviceStateJson(state: ServiceState): Partial<ServiceState> {
     ...(state.lastAttemptAt === undefined ? {} : { lastAttemptAt: state.lastAttemptAt }),
     ...(state.lastError === undefined ? {} : { lastError: state.lastError }),
     ...(state.lastSuccessAt === undefined ? {} : { lastSuccessAt: state.lastSuccessAt }),
+    ...(state.lastSuccessDate === undefined ? {} : { lastSuccessDate: state.lastSuccessDate }),
     version: state.version,
   };
 }
@@ -889,27 +940,24 @@ function serviceRunCommandArgs(): string {
   return "service run --scheduled";
 }
 
-function windowsTaskName(time: ScheduleTime): string {
+function windowsTaskName(): string {
+  return WINDOWS_TASK_NAME;
+}
+
+function legacyWindowsTaskName(time: ScheduleTime): string {
   return `${WINDOWS_TASK_NAME}-${formatScheduleTime(time).replace(":", "")}`;
 }
 
 function windowsTaskNames(): string[] {
-  return SCHEDULE_TIMES.map((time) => windowsTaskName(time));
+  return [windowsTaskName(), ...LEGACY_SCHEDULE_TIMES.map((time) => legacyWindowsTaskName(time))];
 }
 
-function renderLaunchdScheduleIntervals(): string {
-  return SCHEDULE_TIMES.map(
-    (time) => `    <dict>
-      <key>Hour</key>
-      <integer>${time.hour}</integer>
-      <key>Minute</key>
-      <integer>${time.minute}</integer>
-    </dict>`,
-  ).join("\n");
+function renderLaunchdStartInterval(): string {
+  return String(SERVICE_INTERVAL_SECONDS);
 }
 
 function renderSystemdOnCalendar(): string {
-  return SCHEDULE_TIMES.map((time) => `OnCalendar=*-*-* ${formatScheduleTime(time)}:00`).join("\n");
+  return "OnCalendar=hourly";
 }
 
 function formatScheduleTime(time: ScheduleTime): string {
@@ -917,11 +965,7 @@ function formatScheduleTime(time: ScheduleTime): string {
 }
 
 function scheduleDescription(): string {
-  const times = SCHEDULE_TIMES.map(formatScheduleTime);
-  const last = times.at(-1);
-  const rest = times.slice(0, -1);
-
-  return `daily at ${rest.join(", ")}, and ${last} local time`;
+  return "checks hourly and syncs once per local day";
 }
 
 function servicePathsEffect(
@@ -1088,10 +1132,8 @@ function renderLaunchdPlist(paths: ServicePaths): string {
   <array>
     <string>${escapeXml(paths.wrapperPath)}</string>
   </array>
-  <key>StartCalendarInterval</key>
-  <array>
-${renderLaunchdScheduleIntervals()}
-  </array>
+  <key>StartInterval</key>
+  <integer>${renderLaunchdStartInterval()}</integer>
   <key>StandardOutPath</key>
   <string>${escapeXml(paths.logPath)}</string>
   <key>StandardErrorPath</key>
@@ -1208,20 +1250,21 @@ function installNativeScheduler(paths: ServicePaths): Effect.Effect<void, unknow
   }
 
   return Effect.gen(function* () {
-    for (const time of SCHEDULE_TIMES) {
-      yield* runExecutable("schtasks", [
-        "/Create",
-        "/TN",
-        windowsTaskName(time),
-        "/SC",
-        "DAILY",
-        "/ST",
-        formatScheduleTime(time),
-        "/TR",
-        cmdQuote(paths.wrapperPath),
-        "/F",
-      ]);
+    for (const taskName of windowsTaskNames()) {
+      yield* runExecutable("schtasks", ["/Delete", "/TN", taskName, "/F"]).pipe(Effect.ignore);
     }
+    yield* runExecutable("schtasks", [
+      "/Create",
+      "/TN",
+      windowsTaskName(),
+      "/SC",
+      "HOURLY",
+      "/MO",
+      "1",
+      "/TR",
+      cmdQuote(paths.wrapperPath),
+      "/F",
+    ]);
   });
 }
 
@@ -1564,6 +1607,8 @@ export {
   formatServiceStatusAutoUpdate,
   isEphemeralCommandPath,
   legacyServiceWrapperPaths,
+  deterministicServiceJitterMs,
+  localDateKey,
   renderLaunchdPlist,
   renderServiceWrapper,
   renderSystemdService,
@@ -1574,12 +1619,14 @@ export {
   serviceInstallEffect,
   serviceInstallProgram,
   serviceLockStatus,
+  serviceStateJson,
   servicePathsEffect,
   servicePaths,
   serviceRunEffect,
   serviceStatusEffect,
   serviceUninstallEffect,
   shouldSkipServiceRun,
+  windowsTaskNames,
   ServiceAutoUpdateManagerError,
   ServiceCommandNotFoundError,
   ServiceEnvTokenError,

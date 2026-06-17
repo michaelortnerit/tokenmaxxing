@@ -21,11 +21,13 @@ import {
   backendForPlatform,
   capturedServiceEnv,
   detectAutoUpdateManager,
+  deterministicServiceJitterMs,
   findCommandOnPath,
   formatServiceLockStatus,
   formatServiceStatusAutoUpdate,
   isEphemeralCommandPath,
   legacyServiceWrapperPaths,
+  localDateKey,
   renderLaunchdPlist,
   renderServiceWrapper,
   renderSystemdTimer,
@@ -35,7 +37,9 @@ import {
   type ServiceMetadata,
   type ServicePaths,
   servicePaths,
+  serviceStateJson,
   shouldSkipServiceRun,
+  windowsTaskNames,
 } from "./service";
 
 interface TestLayerOptions {
@@ -299,7 +303,7 @@ describe("renderServiceWrapper", () => {
 });
 
 describe("native scheduler templates", () => {
-  it("renders launchd and systemd schedules for four daily local times", () => {
+  it("renders launchd and systemd hourly schedules", () => {
     const paths = servicePaths({
       env: { TOKENMAXXING_CONFIG_DIR: "/tmp/tokenmaxxing" },
       home: "/Users/alex",
@@ -310,15 +314,12 @@ describe("native scheduler templates", () => {
     const launchdPlist = renderLaunchdPlist(paths!);
     expect(launchdPlist).toContain("<string>/tmp/tokenmaxxing/tokenmaxxing.sh</string>");
     expect(launchdPlist).not.toContain("service-sync.sh");
-    expect(launchdPlist).toContain("<integer>9</integer>");
-    expect(launchdPlist).toContain("<integer>13</integer>");
-    expect(launchdPlist).toContain("<integer>17</integer>");
-    expect(launchdPlist).toContain("<integer>21</integer>");
-    expect(renderSystemdTimer()).toContain("OnCalendar=*-*-* 09:00:00");
-    expect(renderSystemdTimer()).toContain("OnCalendar=*-*-* 13:00:00");
-    expect(renderSystemdTimer()).toContain("OnCalendar=*-*-* 17:00:00");
-    expect(renderSystemdTimer()).toContain("OnCalendar=*-*-* 21:00:00");
-    expect(scheduleDescription()).toBe("daily at 09:00, 13:00, 17:00, and 21:00 local time");
+    expect(launchdPlist).toContain("<key>StartInterval</key>");
+    expect(launchdPlist).toContain("<integer>3600</integer>");
+    expect(launchdPlist).not.toContain("StartCalendarInterval");
+    expect(renderSystemdTimer()).toContain("OnCalendar=hourly");
+    expect(renderSystemdTimer()).toContain("Persistent=true");
+    expect(scheduleDescription()).toBe("checks hourly and syncs once per local day");
   });
 });
 
@@ -346,21 +347,80 @@ describe("legacyServiceWrapperPaths", () => {
   });
 });
 
+describe("windowsTaskNames", () => {
+  it("includes the current hourly task and legacy daily task names for cleanup", () => {
+    expect(windowsTaskNames()).toEqual([
+      "tokenmaxxing-sync",
+      "tokenmaxxing-sync-0900",
+      "tokenmaxxing-sync-1300",
+      "tokenmaxxing-sync-1700",
+      "tokenmaxxing-sync-2100",
+    ]);
+  });
+});
+
 describe("shouldSkipServiceRun", () => {
-  it("skips only when a successful run happened within the last three hours", () => {
+  it("skips when today already has a successful run", () => {
     expect(
       shouldSkipServiceRun(
-        { lastSuccessAt: "2026-06-16T10:00:00.000Z", version: 1 },
-        new Date("2026-06-16T12:59:59.000Z"),
+        { lastSuccessDate: localDateKey(new Date(2026, 5, 16, 10)), version: 1 },
+        new Date(2026, 5, 16, 23),
       ),
     ).toBe(true);
     expect(
       shouldSkipServiceRun(
-        { lastSuccessAt: "2026-06-16T10:00:00.000Z", version: 1 },
-        new Date("2026-06-16T13:00:00.000Z"),
+        { lastSuccessDate: localDateKey(new Date(2026, 5, 15, 10)), version: 1 },
+        new Date(2026, 5, 16, 0),
       ),
     ).toBe(false);
-    expect(shouldSkipServiceRun(null, new Date("2026-06-16T13:00:00.000Z"))).toBe(false);
+    expect(shouldSkipServiceRun(null, new Date(2026, 5, 16, 13))).toBe(false);
+  });
+
+  it("falls back to legacy lastSuccessAt when lastSuccessDate has not been written yet", () => {
+    expect(
+      shouldSkipServiceRun(
+        { lastSuccessAt: new Date(2026, 5, 16, 10).toISOString(), version: 1 },
+        new Date(2026, 5, 16, 23),
+      ),
+    ).toBe(true);
+    expect(
+      shouldSkipServiceRun(
+        { lastSuccessAt: new Date(2026, 5, 15, 10).toISOString(), version: 1 },
+        new Date(2026, 5, 16, 0),
+      ),
+    ).toBe(false);
+    expect(
+      shouldSkipServiceRun({ lastSuccessAt: "not-a-date", version: 1 }, new Date(2026, 5, 16, 0)),
+    ).toBe(false);
+  });
+});
+
+describe("serviceStateJson", () => {
+  it("serializes the daily success date when present", () => {
+    expect(
+      serviceStateJson({
+        lastAttemptAt: "2026-06-16T10:00:00.000Z",
+        lastSuccessAt: "2026-06-16T10:00:00.000Z",
+        lastSuccessDate: "2026-06-16",
+        version: 1,
+      }),
+    ).toEqual({
+      lastAttemptAt: "2026-06-16T10:00:00.000Z",
+      lastSuccessAt: "2026-06-16T10:00:00.000Z",
+      lastSuccessDate: "2026-06-16",
+      version: 1,
+    });
+  });
+});
+
+describe("deterministicServiceJitterMs", () => {
+  it("returns a stable delay within the configured jitter window", () => {
+    const first = deterministicServiceJitterMs("device_123");
+    const second = deterministicServiceJitterMs("device_123");
+
+    expect(first).toBe(second);
+    expect(first).toBeGreaterThanOrEqual(0);
+    expect(first).toBeLessThanOrEqual(10 * 60 * 1000);
   });
 });
 
