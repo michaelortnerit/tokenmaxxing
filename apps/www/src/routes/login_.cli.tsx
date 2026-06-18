@@ -4,7 +4,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { CheckCircle, TerminalWindow } from "@phosphor-icons/react/ssr";
 
-import { OAuthProviderButtons } from "../components/oauth-providers";
+import { LOGIN_OAUTH_PROVIDERS, OAuthProviderButtons } from "../components/oauth-providers";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Code } from "../components/ui/code";
@@ -53,7 +53,11 @@ function CliLoginPage() {
           <p className="mt-2 text-sm text-muted-foreground">
             Sign in to approve code <Code>{code}</Code>.
           </p>
-          <OAuthProviderButtons className="mt-6" redirect={cliLoginRedirectPath(code)} />
+          <OAuthProviderButtons
+            className="mt-6"
+            providers={LOGIN_OAUTH_PROVIDERS}
+            redirect={cliLoginRedirectPath(code)}
+          />
         </>
       ) : approve.isSuccess ? (
         <>

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { OAuthProviderButtons } from "../components/oauth-providers";
+import { LOGIN_OAUTH_PROVIDERS, OAuthProviderButtons } from "../components/oauth-providers";
 import { Card } from "../components/ui/card";
 
 const Route = createFileRoute("/login")({
@@ -25,7 +25,11 @@ function LoginPage() {
       <p className="mt-2 text-sm text-muted-foreground">
         Choose an OAuth provider to create or access your profile.
       </p>
-      <OAuthProviderButtons className="mt-6" redirect={redirect} />
+      <OAuthProviderButtons
+        className="mt-6"
+        providers={LOGIN_OAUTH_PROVIDERS}
+        redirect={redirect}
+      />
     </Card>
   );
 }
