@@ -1,7 +1,7 @@
 import { Cause, Effect, Option } from "effect";
 import { CliError, Flag, GlobalFlag } from "effect/unstable/cli";
 
-import { humanFailure, type HumanFailureContent, shouldUseClack } from "./output";
+import { formatHighlight, humanFailure, type HumanFailureContent, shouldUseClack } from "./output";
 import { ConsoleService } from "./services";
 
 /**
@@ -119,9 +119,7 @@ function renderCliFailure<E>(
 
   return Effect.gen(function* () {
     const output = yield* Effect.service(ConsoleService);
-    const renderedFailure = shouldUseClack()
-      ? clackFailureForCliFailure(failure.message)
-      : failure.message;
+    const renderedFailure = failureForHumanOutput(failure);
 
     yield* humanFailure(renderedFailure);
 
@@ -133,9 +131,26 @@ function renderCliFailure<E>(
   });
 }
 
+function failureForHumanOutput(failure: CliFailure): string | HumanFailureContent {
+  if (shouldUseClack()) {
+    return clackFailureForCliFailure(failure.message, {
+      primaryMessageRendered: failure.primaryMessageRendered,
+    });
+  }
+
+  if (failure.primaryMessageRendered) {
+    return clackFailureForCliFailure(failure.message, {
+      primaryMessageRendered: true,
+    });
+  }
+
+  return failure.message;
+}
+
 interface CliFailure {
   code: string;
   message: string;
+  primaryMessageRendered: boolean;
 }
 
 function failureForCause<E>(cause: Cause.Cause<E>): CliFailure | undefined {
@@ -154,6 +169,7 @@ function failureForCause<E>(cause: Cause.Cause<E>): CliFailure | undefined {
       return {
         code: codeForTaggedError(error.value),
         message: error.value.message,
+        primaryMessageRendered: isPrimaryMessageRendered(error.value),
       };
     }
   }
@@ -161,6 +177,7 @@ function failureForCause<E>(cause: Cause.Cause<E>): CliFailure | undefined {
   return {
     code: "unexpected_cli_failure",
     message: "error: unexpected CLI failure\nhint: rerun with --verbose and report the output",
+    primaryMessageRendered: false,
   };
 }
 
@@ -194,6 +211,10 @@ function codeForTaggedError(error: Error): string {
     .toLowerCase();
 }
 
+function isPrimaryMessageRendered(error: Error): boolean {
+  return (error as { primaryMessageRendered?: unknown }).primaryMessageRendered === true;
+}
+
 function jsonFailureForCliFailure(failure: CliFailure) {
   const parsed = parseCliMessage(failure.message);
 
@@ -216,7 +237,10 @@ function parseCliMessage(message: string) {
   return { hint, message: parsedMessage };
 }
 
-function clackFailureForCliFailure(message: string): HumanFailureContent {
+function clackFailureForCliFailure(
+  message: string,
+  options: { primaryMessageRendered?: boolean | undefined } = {},
+): HumanFailureContent {
   const lines = message.split("\n");
   const first = lines[0] ?? message;
   const parsedMessage = first.startsWith("error: ") ? first.slice("error: ".length) : first;
@@ -235,8 +259,20 @@ function clackFailureForCliFailure(message: string): HumanFailureContent {
   return {
     context,
     hint,
-    message: parsedMessage,
+    message: highlightCliFailureMessage(parsedMessage),
+    ...(options.primaryMessageRendered === undefined
+      ? {}
+      : { primaryMessageRendered: options.primaryMessageRendered }),
   };
+}
+
+function highlightCliFailureMessage(message: string): string {
+  const prefix = "already logged in as ";
+  if (message.startsWith(prefix)) {
+    return `${prefix}${formatHighlight(message.slice(prefix.length))}`;
+  }
+
+  return message;
 }
 
 export {

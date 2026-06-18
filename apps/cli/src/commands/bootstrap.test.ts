@@ -144,7 +144,7 @@ describe("bootstrapProgram", () => {
     ]);
   });
 
-  it("logs the authenticated user when bootstrap starts from a stored login", async () => {
+  it("continues when bootstrap starts from a stored login", async () => {
     const logs: string[] = [];
     const { calls, runtime } = testRuntime({
       auth: {
@@ -166,7 +166,7 @@ describe("bootstrapProgram", () => {
       "confirm",
       "open:https://tokenmaxxing.example/alex",
     ]);
-    expect(logs).toContain("Logged in as alex.");
+    expect(logs).toEqual([]);
   });
 
   it("uses --service yes without prompting and works in non-interactive terminals", async () => {

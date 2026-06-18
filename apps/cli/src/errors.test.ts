@@ -172,6 +172,35 @@ describe("renderCliFailure", () => {
     ]);
   });
 
+  it("does not re-render primary Clack error rows that were finalized by a spinner", async () => {
+    const { errors, layer, logs } = testConsole();
+    setTty(true);
+    delete process.env.CI;
+    delete process.env.NO_COLOR;
+    process.env.TERM = "xterm-256color";
+
+    const exit = await Effect.runPromiseExit(
+      Effect.fail(
+        new AlreadyLoggedInError({
+          envTokenActive: false,
+          login: "pondorasti",
+          primaryMessageRendered: true,
+        }),
+      ).pipe(
+        Effect.tapCause((cause) => renderCliFailure(cause, { json: false, verbose: false })),
+        Effect.provide(layer),
+      ),
+    );
+
+    expect(exit._tag).toBe("Failure");
+    expect(logs).toEqual([]);
+    expect(errors).toEqual([]);
+    expect(promptCalls).toEqual([
+      "info:Hint: Run \x1b[36mtokenmaxxing logout\x1b[0m first before logging in again",
+      "outro:Failed",
+    ]);
+  });
+
   it("includes debug output in verbose mode", async () => {
     const { errors, layer } = testConsole();
     setTty(false);
@@ -194,6 +223,20 @@ describe("clackFailureForCliFailure", () => {
     expect(new AlreadyLoggedInError({ envTokenActive: false }).message).toBe(
       "error: already logged in\nhint: run tokenmaxxing logout first before logging in again",
     );
+  });
+
+  it("highlights usernames in already logged in failures", () => {
+    delete process.env.NO_COLOR;
+
+    expect(
+      clackFailureForCliFailure(
+        "error: already logged in as pondorasti\nhint: run tokenmaxxing logout first before logging in again",
+      ),
+    ).toEqual({
+      context: [],
+      hint: "run tokenmaxxing logout first before logging in again",
+      message: "already logged in as \x1b[36mpondorasti\x1b[0m",
+    });
   });
 
   it("splits the redundant error prefix, context, and hint", () => {

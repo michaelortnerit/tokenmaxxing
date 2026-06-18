@@ -485,6 +485,38 @@ describe("resolveSyncAuth", () => {
       }
     }
   });
+
+  it("can replace stored-login validation spinner with a custom success message", async () => {
+    const originalNoColor = process.env.NO_COLOR;
+    process.env.NO_COLOR = "";
+    const { layer, state } = makeTestLayer({
+      initialConfig: {
+        apiUrl: "https://api.tokenmaxxing.example",
+        token: "tmx_old",
+        wwwUrl: "https://tokenmaxxing.example",
+      },
+    });
+
+    try {
+      const exit = await Effect.runPromiseExit(
+        resolveSyncAuth({
+          json: false,
+          showStoredLoginSpinner: true,
+          storedLoginSuccessMessage: (authenticatedUser) =>
+            `Logged in as ${authenticatedUser.login}`,
+        }).pipe(Effect.provide(layer)),
+      );
+
+      expect(exit._tag).toBe("Success");
+      expect(state.logs).toEqual(["Checking current login...", "Logged in as alex"]);
+    } finally {
+      if (originalNoColor === undefined) {
+        delete process.env.NO_COLOR;
+      } else {
+        process.env.NO_COLOR = originalNoColor;
+      }
+    }
+  });
 });
 
 describe("browserLoginEffect", () => {

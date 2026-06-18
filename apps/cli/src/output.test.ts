@@ -5,6 +5,7 @@ import { ConsoleService } from "./services";
 import {
   formatClackHintRow,
   formatClackRow,
+  formatHighlight,
   formatUrl,
   humanConfirm,
   humanFailure,
@@ -340,6 +341,16 @@ describe("formatUrl", () => {
     expect(formatUrl("https://tokenmaxxing.sh", { env: { NO_COLOR: "" } })).toBe(
       "https://tokenmaxxing.sh",
     );
+  });
+});
+
+describe("formatHighlight", () => {
+  it("highlights inline CLI values without underlining them", () => {
+    expect(formatHighlight("pondorasti", { env: {} })).toBe("\x1b[36mpondorasti\x1b[0m");
+  });
+
+  it("respects NO_COLOR", () => {
+    expect(formatHighlight("pondorasti", { env: { NO_COLOR: "" } })).toBe("pondorasti");
   });
 });
 

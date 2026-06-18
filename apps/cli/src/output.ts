@@ -22,6 +22,7 @@ interface HumanFailureContent {
   context?: readonly string[];
   hint?: string | undefined;
   message: string;
+  primaryMessageRendered?: boolean | undefined;
 }
 
 interface HumanSpinner {
@@ -117,7 +118,9 @@ function humanFailure(failure: string | HumanFailureContent, options: HumanOutpu
         if (typeof failure === "string") {
           prompts.log.error(formatClackRow(failure));
         } else {
-          prompts.log.error(formatClackRow(failure.message));
+          if (failure.primaryMessageRendered !== true) {
+            prompts.log.error(formatClackRow(failure.message));
+          }
           for (const line of failure.context ?? []) {
             prompts.log.info(formatClackRow(line));
           }
@@ -266,7 +269,10 @@ function shouldUseClack(): boolean {
 }
 
 function plainFailureMessage(failure: HumanFailureContent): string {
-  const lines = [failure.message, ...(failure.context ?? [])];
+  const lines = [
+    ...(failure.primaryMessageRendered === true ? [] : [failure.message]),
+    ...(failure.context ?? []),
+  ];
   if (failure.hint !== undefined) {
     lines.push(`hint: ${failure.hint}`);
   }
@@ -439,6 +445,7 @@ function firstAlphabeticalCharacterIndex(line: string, start: number): number {
 }
 
 export {
+  formatHighlight,
   formatClackHintRow,
   formatClackRow,
   formatUrl,
@@ -456,6 +463,7 @@ export {
 };
 
 export type {
+  FormatHighlightOptions,
   FormatUrlOptions,
   HumanConfirmOptions,
   HumanFailureContent,

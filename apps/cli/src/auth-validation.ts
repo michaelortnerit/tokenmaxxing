@@ -1,11 +1,21 @@
 import { Effect } from "effect";
 import type { AuthUser } from "@tokenmaxxing/api-contract";
 
-import { humanSpinner, type HumanOutputOptions } from "./output";
+import {
+  formatHighlight,
+  humanSpinner,
+  type FormatHighlightOptions,
+  type HumanOutputOptions,
+} from "./output";
 import type { TokenmaxxingApiClient } from "./services";
+
+type ValidateCurrentLoginSuccessDisposition = "error" | "success";
+type ValidateCurrentLoginSuccessMessage = ((user: AuthUser) => string) | string | undefined;
 
 interface ValidateCurrentLoginOptions extends HumanOutputOptions {
   showSpinner?: boolean | undefined;
+  successDisposition?: ValidateCurrentLoginSuccessDisposition | undefined;
+  successMessage?: ValidateCurrentLoginSuccessMessage;
 }
 
 type CurrentLoginValidation =
@@ -34,7 +44,19 @@ function validateCurrentLogin(
     );
 
     if (result._tag === "valid") {
-      yield* Effect.sync(() => spinner?.stop("Validated current login."));
+      const successMessage =
+        typeof options.successMessage === "function"
+          ? options.successMessage(result.user)
+          : (options.successMessage ?? "Validated current login.");
+      const successDisposition = options.successDisposition ?? "success";
+      yield* Effect.sync(() => {
+        if (successDisposition === "error") {
+          spinner?.error(successMessage);
+          return;
+        }
+
+        spinner?.stop(successMessage);
+      });
       return result;
     }
 
@@ -51,5 +73,24 @@ function isUnauthorizedError(cause: unknown): boolean {
   );
 }
 
-export { isUnauthorizedError, validateCurrentLogin };
-export type { CurrentLoginValidation, ValidateCurrentLoginOptions };
+function loggedInAsMessage(
+  user: Pick<AuthUser, "login">,
+  options: FormatHighlightOptions = {},
+): string {
+  return `Logged in as ${formatHighlight(user.login, options)}`;
+}
+
+function alreadyLoggedInAsMessage(
+  user: Pick<AuthUser, "login">,
+  options: FormatHighlightOptions = {},
+): string {
+  return `Already logged in as ${formatHighlight(user.login, options)}`;
+}
+
+export { alreadyLoggedInAsMessage, isUnauthorizedError, loggedInAsMessage, validateCurrentLogin };
+export type {
+  CurrentLoginValidation,
+  ValidateCurrentLoginSuccessDisposition,
+  ValidateCurrentLoginOptions,
+  ValidateCurrentLoginSuccessMessage,
+};

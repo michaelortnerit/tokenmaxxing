@@ -13,7 +13,11 @@ import {
   TerminalService,
 } from "../services";
 import { formatUrl, humanFrame, humanLog, writeJson } from "../output";
-import { validateCurrentLogin } from "../auth-validation";
+import {
+  alreadyLoggedInAsMessage,
+  loggedInAsMessage,
+  validateCurrentLogin,
+} from "../auth-validation";
 
 class StartCliLoginError extends Data.TaggedError("StartCliLoginError")<{
   readonly cause: unknown;
@@ -54,6 +58,7 @@ class LoginTimeoutError extends Data.TaggedError("LoginTimeoutError")<{}> {
 class AlreadyLoggedInError extends Data.TaggedError("AlreadyLoggedInError")<{
   readonly envTokenActive: boolean;
   readonly login?: string | undefined;
+  readonly primaryMessageRendered?: boolean | undefined;
 }> {
   override get message() {
     const message =
@@ -122,11 +127,20 @@ function loginEffect(options: { json: boolean }) {
       const envTokenActive = yield* config.hasEnvToken();
       if (stored.token !== undefined) {
         const client = yield* clients.make({ baseUrl: stored.apiUrl, token: stored.token });
-        const validated = yield* validateCurrentLogin(client, { ...options, showSpinner: true });
+        const validated = yield* validateCurrentLogin(client, {
+          ...options,
+          showSpinner: true,
+          successDisposition: "error",
+          successMessage: alreadyLoggedInAsMessage,
+        });
 
         if (validated._tag === "valid") {
           return yield* Effect.fail(
-            new AlreadyLoggedInError({ envTokenActive, login: validated.user.login }),
+            new AlreadyLoggedInError({
+              envTokenActive,
+              login: validated.user.login,
+              primaryMessageRendered: true,
+            }),
           );
         }
 
@@ -221,7 +235,7 @@ function browserLoginEffect(options: BrowserLoginOptions) {
           wwwUrl: stored.wwwUrl,
         };
 
-        yield* humanLog("success", `Logged in as ${poll.user.login}.`, options);
+        yield* humanLog("success", loggedInAsMessage(poll.user), options);
         return { config: nextConfig, user: poll.user };
       }
 

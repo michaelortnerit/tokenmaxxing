@@ -121,6 +121,7 @@ interface SyncProgramOptions extends SyncOptions {
 interface ResolveSyncAuthOptions {
   json: boolean;
   showStoredLoginSpinner?: boolean | undefined;
+  storedLoginSuccessMessage?: ((user: AuthUser) => string) | string | undefined;
 }
 
 type AuthenticatedCliConfig = CliConfig & { token: string };
@@ -507,6 +508,7 @@ function resolveSyncAuth(options: ResolveSyncAuthOptions) {
     const validated = yield* validateCurrentLogin(client, {
       ...options,
       showSpinner: options.showStoredLoginSpinner === true,
+      successMessage: options.storedLoginSuccessMessage,
     });
 
     if (validated._tag === "valid") {

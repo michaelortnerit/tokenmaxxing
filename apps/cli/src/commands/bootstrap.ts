@@ -1,7 +1,8 @@
 import { Data, Effect, Option } from "effect";
 import { Command, Flag } from "effect/unstable/cli";
 
-import { humanConfirm, humanFrame, humanLog } from "../output";
+import { loggedInAsMessage } from "../auth-validation";
+import { humanConfirm, humanFrame } from "../output";
 import { TerminalService } from "../services";
 import { serviceInstallProgram } from "./service";
 import {
@@ -72,11 +73,14 @@ function bootstrapProgram(options: BootstrapOptions, runtime: BootstrapRuntime =
     }
 
     const auth = yield* (
-      runtime.resolveAuth ?? (() => resolveSyncAuth({ json: false, showStoredLoginSpinner: true }))
+      runtime.resolveAuth ??
+      (() =>
+        resolveSyncAuth({
+          json: false,
+          showStoredLoginSpinner: true,
+          storedLoginSuccessMessage: loggedInAsMessage,
+        }))
     )();
-    if (auth.authSource === "stored") {
-      yield* humanLog("success", `Logged in as ${auth.user.login}.`);
-    }
 
     const result = yield* (
       runtime.sync ?? ((syncAuth) => syncProgram({ auth: syncAuth, dryRun: false, json: false }))
