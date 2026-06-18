@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { Command, Flag } from "effect/unstable/cli";
 
 import { ApiClientService, ConfigService } from "../services";
-import { humanFrame, humanLog, writeJson } from "../output";
+import { humanFrame, humanLog, humanSpinner, writeJson } from "../output";
 
 const logoutCommand = Command.make(
   "logout",
@@ -26,14 +26,18 @@ function logoutEffect(options: { json: boolean }) {
       // Best-effort server-side revocation; local logout must succeed even
       // when the API is unreachable.
       if (cleared.token !== undefined) {
-        const client = yield* clients.make({ baseUrl: stored.apiUrl, token: cleared.token });
-        yield* client.usage.logout().pipe(Effect.ignore);
+        const spinner = yield* humanSpinner("Logging out", options);
+        yield* clients.make({ baseUrl: stored.apiUrl, token: cleared.token }).pipe(
+          Effect.flatMap((client) => client.usage.logout()),
+          Effect.ignore,
+        );
+        yield* Effect.sync(() => spinner.stop("Logged out"));
       }
 
       if (options.json) {
         yield* writeJson({ status: "ok", tokenCleared: cleared.tokenCleared });
       } else if (cleared.tokenCleared) {
-        yield* humanLog("success", "Logged out; the token was revoked", options);
+        return;
       } else {
         yield* humanLog("info", "Not logged in; nothing to do", options);
       }
