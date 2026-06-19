@@ -250,7 +250,7 @@ function FaqSection() {
               className="h-[var(--collapsible-panel-height)] overflow-hidden transition-[height,opacity] duration-200 ease-out data-[ending-style]:h-0 data-[ending-style]:opacity-0 data-[starting-style]:h-0 data-[starting-style]:opacity-0"
               hiddenUntilFound
             >
-              <div className="max-w-2xl pt-3 text-sm leading-6 text-muted-foreground">
+              <div className="ml-6 max-w-2xl pt-3 text-sm leading-6 text-muted-foreground">
                 {item.answer}
               </div>
             </Collapsible.Panel>
