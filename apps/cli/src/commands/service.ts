@@ -215,7 +215,7 @@ const installCommand = Command.make(
   },
   ({ force, json, noAutoUpdate, refresh }) =>
     serviceInstallEffect({ autoUpdate: !noAutoUpdate, force, json, refresh }),
-).pipe(Command.withDescription("Install daily automatic sync"));
+).pipe(Command.withDescription("Install automatic sync"));
 
 const uninstallCommand = Command.make(
   "uninstall",
@@ -223,7 +223,7 @@ const uninstallCommand = Command.make(
     json: Flag.boolean("json").pipe(Flag.withDescription("Output machine-readable JSON")),
   },
   ({ json }) => serviceUninstallEffect({ json }),
-).pipe(Command.withDescription("Uninstall daily automatic sync"));
+).pipe(Command.withDescription("Uninstall automatic sync"));
 
 const statusCommand = Command.make(
   "status",
@@ -245,7 +245,7 @@ const runCommand = Command.make(
   "run",
   {
     force: Flag.boolean("force").pipe(
-      Flag.withDescription("Run even if the last scheduled sync recently succeeded"),
+      Flag.withDescription("Deprecated; service runs sync every time"),
     ),
     json: Flag.boolean("json").pipe(Flag.withDescription("Output machine-readable JSON")),
     scheduled: Flag.boolean("scheduled").pipe(Flag.withHidden),
@@ -254,7 +254,7 @@ const runCommand = Command.make(
 ).pipe(Command.withDescription("Run the automatic sync job now"));
 
 const serviceCommand = Command.make("service").pipe(
-  Command.withDescription("Manage daily automatic sync"),
+  Command.withDescription("Manage automatic sync"),
   Command.withSubcommands([
     installCommand,
     uninstallCommand,
@@ -452,7 +452,6 @@ function serviceStatusEffect(options: { json?: boolean | undefined } = {}) {
         logPath: paths.logPath,
         schedule: metadata?.schedule ?? scheduleDescription(),
         status: "ok",
-        todaySynced: shouldSkipServiceRun(state, now),
         wrapperPath: paths.wrapperPath,
       };
 
@@ -468,7 +467,6 @@ function serviceStatusEffect(options: { json?: boolean | undefined } = {}) {
         console.log(`Auto-update: ${status.autoUpdate}`);
         console.log(`Last success: ${status.lastSuccessAt ?? "never"}`);
         console.log(`Last success date: ${status.lastSuccessDate ?? "never"}`);
-        console.log(`Today synced: ${status.todaySynced ? "yes" : "no"}`);
         if (status.lastError !== undefined) {
           console.log(`Last error: ${status.lastError}`);
         }
@@ -596,16 +594,6 @@ function serviceDoctorEffect(options: { json?: boolean | undefined } = {}) {
           state?.lastSuccessAt ?? "never",
         ),
         doctorCheck(
-          serviceLastSuccessDate(state) === undefined ? "info" : "ok",
-          "success date",
-          serviceLastSuccessDate(state) ?? "never",
-        ),
-        doctorCheck(
-          shouldSkipServiceRun(state, now) ? "ok" : "info",
-          "today synced",
-          shouldSkipServiceRun(state, now) ? "yes" : "no",
-        ),
-        doctorCheck(
           state?.lastError === undefined ? "ok" : "warn",
           "last error",
           state?.lastError ?? "none",
@@ -643,20 +631,6 @@ function runServiceSyncOnce(paths: ServicePaths, options: ServiceRunOptions) {
     const state = yield* readServiceState(paths.statePath);
     const currentState = state ?? { version: 1 as const };
     const now = new Date();
-
-    if (!options.force && shouldSkipServiceRun(state, now)) {
-      if (!options.json && !options.scheduled) {
-        yield* Effect.sync(() => {
-          console.log("Sync skipped; today already synced");
-        });
-      }
-
-      return {
-        logPath: paths.logPath,
-        reason: "already_synced" as const,
-        status: "skipped" as const,
-      };
-    }
 
     if (options.scheduled) {
       const stored = yield* config.readConfig();
@@ -699,7 +673,6 @@ function runServiceSyncOnce(paths: ServicePaths, options: ServiceRunOptions) {
       ...currentState,
       lastAttemptAt: now.toISOString(),
       lastSuccessAt: successAt,
-      lastSuccessDate: localDateKey(new Date(successAt)),
       version: 1,
     }).pipe(Effect.mapError((cause) => new ServiceRunError({ cause })));
 
@@ -733,10 +706,6 @@ function runServiceSyncOnce(paths: ServicePaths, options: ServiceRunOptions) {
       upserted: result.value.upserted ?? 0,
     };
   });
-}
-
-function shouldSkipServiceRun(state: ServiceState | null, now: Date): boolean {
-  return serviceLastSuccessDate(state) === localDateKey(now);
 }
 
 function serviceLastSuccessDate(state: ServiceState | null): string | undefined {
@@ -941,7 +910,6 @@ function serviceStateJson(state: ServiceState): Partial<ServiceState> {
     ...(state.lastAttemptAt === undefined ? {} : { lastAttemptAt: state.lastAttemptAt }),
     ...(state.lastError === undefined ? {} : { lastError: state.lastError }),
     ...(state.lastSuccessAt === undefined ? {} : { lastSuccessAt: state.lastSuccessAt }),
-    ...(state.lastSuccessDate === undefined ? {} : { lastSuccessDate: state.lastSuccessDate }),
     version: state.version,
   };
 }
@@ -1152,7 +1120,7 @@ function formatScheduleTime(time: ScheduleTime): string {
 }
 
 function scheduleDescription(): string {
-  return "checks hourly and syncs once per local day";
+  return "syncs hourly";
 }
 
 function servicePathsEffect(
@@ -1332,7 +1300,7 @@ function renderLaunchdPlist(paths: ServicePaths): string {
 
 function renderSystemdService(paths: ServicePaths): string {
   return `[Unit]
-Description=tokenmaxxing daily usage sync
+Description=tokenmaxxing automatic usage sync
 
 [Service]
 Type=oneshot
@@ -1342,7 +1310,7 @@ ExecStart=${systemdQuote(paths.wrapperPath)}
 
 function renderSystemdTimer(): string {
   return `[Unit]
-Description=Run tokenmaxxing daily usage sync
+Description=Run tokenmaxxing automatic usage sync
 
 [Timer]
 ${renderSystemdOnCalendar()}
@@ -1816,7 +1784,6 @@ export {
   serviceRunEffect,
   serviceStatusEffect,
   serviceUninstallEffect,
-  shouldSkipServiceRun,
   runPackageManagerUpdate,
   runExecutable,
   windowsTaskNames,

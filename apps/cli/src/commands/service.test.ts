@@ -27,7 +27,6 @@ import {
   formatServiceStatusAutoUpdate,
   isEphemeralCommandPath,
   legacyServiceWrapperPaths,
-  localDateKey,
   renderLaunchdPlist,
   renderServiceWrapper,
   renderSystemdTimer,
@@ -38,7 +37,6 @@ import {
   type ServicePaths,
   servicePaths,
   serviceStateJson,
-  shouldSkipServiceRun,
   windowsTaskNames,
 } from "./service";
 
@@ -319,7 +317,7 @@ describe("native scheduler templates", () => {
     expect(launchdPlist).not.toContain("StartCalendarInterval");
     expect(renderSystemdTimer()).toContain("OnCalendar=hourly");
     expect(renderSystemdTimer()).toContain("Persistent=true");
-    expect(scheduleDescription()).toBe("checks hourly and syncs once per local day");
+    expect(scheduleDescription()).toBe("syncs hourly");
   });
 });
 
@@ -359,44 +357,8 @@ describe("windowsTaskNames", () => {
   });
 });
 
-describe("shouldSkipServiceRun", () => {
-  it("skips when today already has a successful run", () => {
-    expect(
-      shouldSkipServiceRun(
-        { lastSuccessDate: localDateKey(new Date(2026, 5, 16, 10)), version: 1 },
-        new Date(2026, 5, 16, 23),
-      ),
-    ).toBe(true);
-    expect(
-      shouldSkipServiceRun(
-        { lastSuccessDate: localDateKey(new Date(2026, 5, 15, 10)), version: 1 },
-        new Date(2026, 5, 16, 0),
-      ),
-    ).toBe(false);
-    expect(shouldSkipServiceRun(null, new Date(2026, 5, 16, 13))).toBe(false);
-  });
-
-  it("falls back to legacy lastSuccessAt when lastSuccessDate has not been written yet", () => {
-    expect(
-      shouldSkipServiceRun(
-        { lastSuccessAt: new Date(2026, 5, 16, 10).toISOString(), version: 1 },
-        new Date(2026, 5, 16, 23),
-      ),
-    ).toBe(true);
-    expect(
-      shouldSkipServiceRun(
-        { lastSuccessAt: new Date(2026, 5, 15, 10).toISOString(), version: 1 },
-        new Date(2026, 5, 16, 0),
-      ),
-    ).toBe(false);
-    expect(
-      shouldSkipServiceRun({ lastSuccessAt: "not-a-date", version: 1 }, new Date(2026, 5, 16, 0)),
-    ).toBe(false);
-  });
-});
-
 describe("serviceStateJson", () => {
-  it("serializes the daily success date when present", () => {
+  it("omits legacy daily success dates from new writes", () => {
     expect(
       serviceStateJson({
         lastAttemptAt: "2026-06-16T10:00:00.000Z",
@@ -407,7 +369,6 @@ describe("serviceStateJson", () => {
     ).toEqual({
       lastAttemptAt: "2026-06-16T10:00:00.000Z",
       lastSuccessAt: "2026-06-16T10:00:00.000Z",
-      lastSuccessDate: "2026-06-16",
       version: 1,
     });
   });
