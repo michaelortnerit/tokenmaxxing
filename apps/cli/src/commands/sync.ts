@@ -21,6 +21,7 @@ import { DEFAULT_SOURCE_NAMES, resolveSources } from "../ccusage/sources";
 import {
   ApiClientService,
   BrowserService,
+  ClockService,
   type CliConfig,
   ConfigService,
   ConsoleService,
@@ -117,6 +118,7 @@ interface SyncOptions {
 interface SyncProgramOptions extends SyncOptions {
   auth?: SyncAuth | undefined;
   silent?: boolean | undefined;
+  uploadPolicy?: UploadRetryPolicy | undefined;
 }
 
 interface ResolveSyncAuthOptions {
@@ -174,6 +176,15 @@ interface UploadUsageReportsOptions {
   };
   options: Pick<SyncProgramOptions, "json" | "silent">;
   rawReports: RawUsageReportInput[];
+  uploadPolicy?: UploadRetryPolicy | undefined;
+}
+
+interface UploadRetryPolicy {
+  attempts: number;
+  backoffMs: readonly number[];
+  jitterRatio: number;
+  random?: (() => number) | undefined;
+  timeoutMs: number;
 }
 
 function syncEffect(options: SyncOptions) {
@@ -312,6 +323,7 @@ function syncProgram(options: SyncProgramOptions) {
       device,
       options,
       rawReports,
+      uploadPolicy: options.uploadPolicy,
     });
     upserted = response.upserted;
 
@@ -327,23 +339,86 @@ function syncProgram(options: SyncProgramOptions) {
   });
 }
 
-function uploadUsageReports({ auth, device, options, rawReports }: UploadUsageReportsOptions) {
+function uploadUsageReports({
+  auth,
+  device,
+  options,
+  rawReports,
+  uploadPolicy,
+}: UploadUsageReportsOptions) {
   return Effect.gen(function* () {
     const spinner = yield* humanSpinner("Uploading usage", options);
+    const upload = uploadUsageReportsOnce({ auth, device, rawReports }, uploadPolicy);
 
-    return yield* auth.client.usage
-      .ingest({
-        payload: {
-          device,
-          reports: rawReports,
-        },
-      })
-      .pipe(
-        Effect.tap(() => Effect.sync(() => spinner.stop("Usage uploaded"))),
-        Effect.tapError(() => Effect.sync(() => spinner.error("Failed uploading usage"))),
-        Effect.mapError((cause) => new SyncPushError({ cause })),
-      );
+    return yield* upload.pipe(
+      Effect.tap(() => Effect.sync(() => spinner.stop("Usage uploaded"))),
+      Effect.tapError(() => Effect.sync(() => spinner.error("Failed uploading usage"))),
+      Effect.mapError((cause) => new SyncPushError({ cause })),
+    );
   });
+}
+
+function uploadUsageReportsOnce(
+  input: Pick<UploadUsageReportsOptions, "auth" | "device" | "rawReports">,
+  uploadPolicy: UploadRetryPolicy | undefined,
+) {
+  const upload = () =>
+    input.auth.client.usage.ingest({
+      payload: {
+        device: input.device,
+        reports: input.rawReports,
+      },
+    });
+
+  if (uploadPolicy === undefined) {
+    return upload();
+  }
+
+  return uploadWithRetry(upload, uploadPolicy);
+}
+
+function uploadWithRetry<A, E, R>(
+  upload: () => Effect.Effect<A, E, R>,
+  policy: UploadRetryPolicy,
+): Effect.Effect<A, unknown, R | ClockService> {
+  return Effect.gen(function* () {
+    const clock = yield* Effect.service(ClockService);
+    const attempts = Math.max(1, Math.floor(policy.attempts));
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      const result = yield* upload().pipe(
+        Effect.timeout(`${Math.max(1, policy.timeoutMs)} millis`),
+        Effect.match({
+          onFailure: (cause) => ({ cause, _tag: "failure" as const }),
+          onSuccess: (value) => ({ value, _tag: "success" as const }),
+        }),
+      );
+
+      if (result._tag === "success") {
+        return result.value;
+      }
+
+      lastError = result.cause;
+      if (attempt < attempts) {
+        const backoffMs = retryBackoffMs(policy, attempt);
+        if (backoffMs > 0) {
+          yield* clock.sleep(backoffMs).pipe(Effect.catch(() => Effect.void));
+        }
+      }
+    }
+
+    return yield* Effect.fail(lastError);
+  });
+}
+
+function retryBackoffMs(policy: UploadRetryPolicy, attempt: number): number {
+  const base = policy.backoffMs[Math.max(0, attempt - 1)] ?? policy.backoffMs.at(-1) ?? 0;
+  const jitterRatio = Math.max(0, policy.jitterRatio);
+  const random = policy.random ?? Math.random;
+  const jitter = jitterRatio === 0 ? 1 : 1 - jitterRatio + random() * jitterRatio * 2;
+
+  return Math.max(0, Math.round(base * jitter));
 }
 
 function syncJsonPayload(result: SyncResult) {
@@ -619,4 +694,11 @@ export {
   uploadUsageReports,
 };
 
-export type { ResolveSyncAuthOptions, SyncAuth, SyncOptions, SyncResult };
+export type {
+  ResolveSyncAuthOptions,
+  SyncAuth,
+  SyncOptions,
+  SyncResult,
+  SyncSourceSummary,
+  UploadRetryPolicy,
+};

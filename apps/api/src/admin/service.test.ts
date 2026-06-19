@@ -6,13 +6,19 @@ import { Forbidden, type AdminUsersResponse } from "@tokenmaxxing/api-contract";
 import {
   AdminRepository,
   adminDeviceStatus,
+  latestReleaseFromRegistryBody,
   makeAdminService,
   type AdminDeviceSnapshot,
   type AdminRepositoryShape,
   type AdminUserSnapshot,
+  type LatestCliRelease,
 } from "./service";
 
 const now = new Date("2026-06-19T20:00:00.000Z");
+const latestRelease: LatestCliRelease = {
+  publishedAt: "2026-06-19T19:00:00.000Z",
+  version: "0.5.4",
+};
 
 interface TestAdminService {
   listUsers(userId: string): Effect.Effect<typeof AdminUsersResponse.Type, Forbidden>;
@@ -80,7 +86,7 @@ function makeRepository(options: {
 async function makeService(repository: AdminRepositoryShape) {
   return (await Effect.runPromise(
     makeAdminService({
-      fetchLatestCliVersion: () => Effect.succeed("0.5.4"),
+      fetchLatestCliRelease: () => Effect.succeed(latestRelease),
       now: () => now,
     }).pipe(Effect.provideService(AdminRepository, repository)),
   )) as unknown as TestAdminService;
@@ -102,12 +108,14 @@ describe("AdminService.listUsers", () => {
 
     expect(response.summary).toEqual({
       latest: 1,
-      outdated: 0,
       stale: 0,
       totalDevices: 1,
       totalUsers: 1,
+      updating: 0,
       unknown: 0,
     });
+    expect(response.latestCliPublishedAt).toBe("2026-06-19T19:00:00.000Z");
+    expect(response.rolloutGraceHours).toBe(2);
     expect(response.users[0]).toMatchObject({
       activeTokenCount: 1,
       deviceCount: 1,
@@ -128,13 +136,33 @@ describe("AdminService.listUsers", () => {
 });
 
 describe("adminDeviceStatus", () => {
-  it("classifies latest, outdated, stale, and unknown devices", () => {
-    expect(adminDeviceStatus(device(), "0.5.4", now)).toBe("latest");
-    expect(adminDeviceStatus(device({ version: "0.5.3" }), "0.5.4", now)).toBe("outdated");
+  it("classifies latest, updating, stale, and unknown devices", () => {
+    expect(adminDeviceStatus(device(), latestRelease, now)).toBe("latest");
+    expect(adminDeviceStatus(device({ version: "0.5.3" }), latestRelease, now)).toBe("updating");
     expect(
-      adminDeviceStatus(device({ lastSyncAt: "2026-06-19T12:00:00.000Z" }), "0.5.4", now),
+      adminDeviceStatus(
+        device({ version: "0.5.3" }),
+        { publishedAt: "2026-06-19T17:59:59.000Z", version: "0.5.4" },
+        now,
+      ),
     ).toBe("stale");
-    expect(adminDeviceStatus(device({ arch: null, version: null }), "0.5.4", now)).toBe("unknown");
-    expect(adminDeviceStatus(device({ lastSyncAt: null }), "0.5.4", now)).toBe("unknown");
+    expect(
+      adminDeviceStatus(device({ lastSyncAt: "2026-06-19T12:00:00.000Z" }), latestRelease, now),
+    ).toBe("stale");
+    expect(adminDeviceStatus(device({ arch: null, version: null }), latestRelease, now)).toBe(
+      "unknown",
+    );
+    expect(adminDeviceStatus(device({ lastSyncAt: null }), latestRelease, now)).toBe("unknown");
+  });
+});
+
+describe("latestReleaseFromRegistryBody", () => {
+  it("reads the latest dist tag and release timestamp from npm package metadata", () => {
+    expect(
+      latestReleaseFromRegistryBody({
+        "dist-tags": { latest: "0.5.4" },
+        time: { "0.5.4": "2026-06-19T19:00:00.000Z" },
+      }),
+    ).toEqual(latestRelease);
   });
 });

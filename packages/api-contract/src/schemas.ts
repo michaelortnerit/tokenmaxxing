@@ -255,7 +255,7 @@ const OkResponse = Schema.Struct({
   ok: Schema.Boolean,
 });
 
-const AdminDeviceStatus = Schema.Literals(["latest", "outdated", "stale", "unknown"]);
+const AdminDeviceStatus = Schema.Literals(["latest", "updating", "stale", "unknown"]);
 
 type AdminDeviceStatus = typeof AdminDeviceStatus.Type;
 
@@ -302,14 +302,16 @@ type AdminUserDebugRow = typeof AdminUserDebugRow.Type;
 
 const AdminUsersResponse = Schema.Struct({
   generatedAt: Schema.String,
+  latestCliPublishedAt: Schema.NullOr(Schema.String),
   latestCliVersion: Schema.NullOr(Schema.String),
+  rolloutGraceHours: Schema.Number,
   staleThresholdHours: Schema.Number,
   summary: Schema.Struct({
     latest: Schema.Number,
-    outdated: Schema.Number,
     stale: Schema.Number,
     totalDevices: Schema.Number,
     totalUsers: Schema.Number,
+    updating: Schema.Number,
     unknown: Schema.Number,
   }),
   users: Schema.Array(AdminUserDebugRow),

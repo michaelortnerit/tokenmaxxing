@@ -33,12 +33,17 @@ import {
   scheduleDescription,
   serviceInstallProgram,
   serviceLockStatus,
+  serviceRunFailureState,
+  serviceRunLogLine,
+  serviceRunSuccessState,
   type ServiceMetadata,
   type ServicePaths,
+  type ServiceState,
   servicePaths,
   serviceStateJson,
   windowsTaskNames,
 } from "./service";
+import type { SyncResult } from "./sync";
 
 interface TestLayerOptions {
   envTokenActive?: boolean;
@@ -370,6 +375,146 @@ describe("serviceStateJson", () => {
       lastAttemptAt: "2026-06-16T10:00:00.000Z",
       lastSuccessAt: "2026-06-16T10:00:00.000Z",
       version: 1,
+    });
+  });
+
+  it("serializes enriched run diagnostics when present", () => {
+    const state: ServiceState = {
+      lastArch: "arm64",
+      lastAttemptAt: "2026-06-16T10:00:00.000Z",
+      lastAutoUpdated: true,
+      lastCliVersion: "0.4.12",
+      lastDurationMs: 1234,
+      lastRows: 42,
+      lastSources: [
+        {
+          days: 3,
+          models: 2,
+          rows: 42,
+          sessions: null,
+          source: "codex",
+          spendUsd: 12.34,
+          status: "synced",
+        },
+      ],
+      lastSuccessAt: "2026-06-16T10:00:01.000Z",
+      lastUpserted: 42,
+      version: 1,
+    };
+
+    expect(serviceStateJson(state)).toEqual(state);
+  });
+});
+
+describe("service run state", () => {
+  const syncResult: SyncResult = {
+    dryRun: false,
+    rows: 42,
+    sourceResults: [
+      {
+        source: "codex",
+        summary: { days: 3, models: 2, rows: 42, sessions: null, spendUsd: 12.34 },
+      },
+      { source: "gemini", summary: null },
+    ],
+    sources: {
+      codex: { days: 3, models: 2, rows: 42, sessions: null, spendUsd: 12.34 },
+      gemini: null,
+    },
+    status: "ok",
+    upserted: 40,
+  };
+
+  it("captures success diagnostics and source summaries", () => {
+    const state = serviceRunSuccessState(
+      { lastError: "old error", version: 1 },
+      {
+        arch: "arm64",
+        attemptAt: "2026-06-16T10:00:00.000Z",
+        autoUpdated: false,
+        durationMs: 1234,
+        result: syncResult,
+        successAt: "2026-06-16T10:00:01.000Z",
+        version: "0.4.12",
+      },
+    );
+
+    expect(state).toMatchObject({
+      lastArch: "arm64",
+      lastAttemptAt: "2026-06-16T10:00:00.000Z",
+      lastAutoUpdated: false,
+      lastCliVersion: "0.4.12",
+      lastDurationMs: 1234,
+      lastError: undefined,
+      lastRows: 42,
+      lastSuccessAt: "2026-06-16T10:00:01.000Z",
+      lastUpserted: 40,
+      version: 1,
+    });
+    expect(state.lastSources).toEqual([
+      {
+        days: 3,
+        models: 2,
+        rows: 42,
+        sessions: null,
+        source: "codex",
+        spendUsd: 12.34,
+        status: "synced",
+      },
+      { source: "gemini", status: "skipped" },
+    ]);
+  });
+
+  it("captures failure diagnostics without clobbering previous success", () => {
+    const state = serviceRunFailureState(
+      {
+        lastRows: 42,
+        lastSources: [{ source: "codex", status: "synced" }],
+        lastSuccessAt: "2026-06-16T09:00:00.000Z",
+        lastUpserted: 40,
+        version: 1,
+      },
+      {
+        arch: "arm64",
+        attemptAt: "2026-06-16T10:00:00.000Z",
+        durationMs: 222,
+        error: "network unavailable",
+        version: "0.4.12",
+      },
+    );
+
+    expect(state).toMatchObject({
+      lastArch: "arm64",
+      lastAttemptAt: "2026-06-16T10:00:00.000Z",
+      lastCliVersion: "0.4.12",
+      lastDurationMs: 222,
+      lastError: "network unavailable",
+      lastRows: 42,
+      lastSuccessAt: "2026-06-16T09:00:00.000Z",
+      lastUpserted: 40,
+    });
+  });
+
+  it("renders structured service log lines without undefined fields", () => {
+    const line = serviceRunLogLine(
+      {
+        lastArch: "arm64",
+        lastAttemptAt: "2026-06-16T10:00:00.000Z",
+        lastCliVersion: "0.4.12",
+        lastDurationMs: 222,
+        lastError: "network unavailable",
+        version: 1,
+      },
+      "failure",
+    );
+
+    expect(JSON.parse(JSON.stringify(line))).toMatchObject({
+      arch: "arm64",
+      durationMs: 222,
+      error: "network unavailable",
+      event: "service_run",
+      status: "failure",
+      version: "0.4.12",
     });
   });
 });

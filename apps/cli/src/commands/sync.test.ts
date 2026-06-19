@@ -160,15 +160,24 @@ function makeConsoleLayer() {
   const state = {
     errors: [] as string[],
     logs: [] as string[],
+    sleeps: [] as number[],
   };
-  const layer = Layer.succeed(ConsoleService)({
-    error: (message?: unknown) => {
-      state.errors.push(String(message));
-    },
-    log: (message?: unknown) => {
-      state.logs.push(String(message));
-    },
-  });
+  const layer = Layer.mergeAll(
+    Layer.succeed(ConsoleService)({
+      error: (message?: unknown) => {
+        state.errors.push(String(message));
+      },
+      log: (message?: unknown) => {
+        state.logs.push(String(message));
+      },
+    }),
+    Layer.succeed(ClockService)({
+      sleep: (ms) =>
+        Effect.sync(() => {
+          state.sleeps.push(ms);
+        }),
+    }),
+  );
 
   return { layer, state };
 }
@@ -343,7 +352,11 @@ describe("uploadUsageReports", () => {
 
   it("marks the upload row as failed when ingest fails", async () => {
     const { layer, state } = makeConsoleLayer();
-    const auth = makeUploadAuth(() => Effect.fail(new Error("network unavailable")));
+    let calls = 0;
+    const auth = makeUploadAuth(() => {
+      calls += 1;
+      return Effect.fail(new Error("network unavailable"));
+    });
 
     const exit = await Effect.runPromiseExit(
       uploadUsageReports({
@@ -361,8 +374,48 @@ describe("uploadUsageReports", () => {
       throw new Error("expected a typed failure");
     }
     expect(error.value).toBeInstanceOf(SyncPushError);
+    expect(calls).toBe(1);
     expect(state.logs).toEqual(["Uploading usage"]);
     expect(state.errors).toEqual(["Failed uploading usage"]);
+    expect(state.sleeps).toEqual([]);
+  });
+
+  it("retries uploads when an upload policy is provided", async () => {
+    const { layer, state } = makeConsoleLayer();
+    let calls = 0;
+    const auth = makeUploadAuth(() => {
+      calls += 1;
+      if (calls < 3) {
+        return Effect.fail(new Error(`network unavailable ${calls}`));
+      }
+
+      return Effect.succeed({
+        received: 1,
+        syncedAt: "2026-06-15T00:00:00.000Z",
+        upserted: 7,
+      });
+    });
+
+    const result = await Effect.runPromise(
+      uploadUsageReports({
+        auth,
+        device: { name: "Mac.local", platform: "darwin" },
+        options: { json: false, silent: true },
+        rawReports: [],
+        uploadPolicy: {
+          attempts: 3,
+          backoffMs: [100, 400],
+          jitterRatio: 0,
+          timeoutMs: 1_000,
+        },
+      }).pipe(Effect.provide(layer)),
+    );
+
+    expect(result.upserted).toBe(7);
+    expect(calls).toBe(3);
+    expect(state.sleeps).toEqual([100, 400]);
+    expect(state.logs).toEqual([]);
+    expect(state.errors).toEqual([]);
   });
 
   it("does not write upload progress for json or silent output", async () => {

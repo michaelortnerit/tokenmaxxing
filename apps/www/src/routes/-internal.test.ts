@@ -13,14 +13,16 @@ import {
 
 const adminData: typeof AdminUsersResponse.Type = {
   generatedAt: "2026-06-19T20:00:00.000Z",
+  latestCliPublishedAt: "2026-06-19T19:00:00.000Z",
   latestCliVersion: "0.5.4",
+  rolloutGraceHours: 2,
   staleThresholdHours: 6,
   summary: {
     latest: 1,
-    outdated: 0,
     stale: 0,
     totalDevices: 1,
     totalUsers: 1,
+    updating: 0,
     unknown: 0,
   },
   users: [
@@ -135,7 +137,7 @@ describe("loadInternalRoute", () => {
 describe("internal formatting helpers", () => {
   it("formats summary and relative timestamps", () => {
     expect(fleetSummary(adminData)).toBe(
-      "User fleet · 1 on latest · 0 outdated · 0 stale · 0 unknown",
+      "User fleet · 1 on latest · 0 updating · 0 stale · 0 unknown",
     );
     expect(formatRelativeTime("2026-06-19T19:30:00.000Z", adminData.generatedAt)).toBe("30m ago");
   });

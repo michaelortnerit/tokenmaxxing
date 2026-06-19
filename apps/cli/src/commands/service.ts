@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { constants } from "node:fs";
 import { access, chmod, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
+import { arch, homedir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { promisify } from "node:util";
 
@@ -11,7 +11,8 @@ import { Command, Flag } from "effect/unstable/cli";
 import { ClockService, ConfigService, ConsoleService } from "../services";
 import { getConfigPath } from "../services/config";
 import { humanFrame, humanLog, humanSpinner, writeJson } from "../output";
-import { resolveSyncAuth, syncProgram } from "./sync";
+import packageJson from "../../package.json";
+import { resolveSyncAuth, syncProgram, type SyncResult, type UploadRetryPolicy } from "./sync";
 
 const execFilePromise = promisify(execFile);
 
@@ -25,6 +26,12 @@ const PACKAGE_NAME = "@851-labs/tokenmaxxing";
 const SERVICE_LOCK_STALE_MS = 2 * 60 * 60 * 1000;
 const SERVICE_INTERVAL_SECONDS = 60 * 60;
 const SERVICE_JITTER_MAX_MS = 10 * 60 * 1000;
+const SERVICE_UPLOAD_RETRY_POLICY: UploadRetryPolicy = {
+  attempts: 3,
+  backoffMs: [1_000, 4_000, 16_000],
+  jitterRatio: 0.2,
+  timeoutMs: 60_000,
+};
 const LEGACY_SCHEDULE_TIMES: readonly ScheduleTime[] = [
   { hour: 9, minute: 0 },
   { hour: 13, minute: 0 },
@@ -112,11 +119,32 @@ interface ServiceRunOptions {
 }
 
 interface ServiceState {
+  lastArch?: string;
   lastAttemptAt?: string;
+  lastAutoUpdated?: boolean;
+  lastCliVersion?: string;
+  lastDurationMs?: number;
   lastError?: string;
+  lastRows?: number;
+  lastSources?: ServiceSourceState[];
   lastSuccessAt?: string;
   lastSuccessDate?: string;
+  lastUpserted?: number;
   version: 1;
+}
+
+interface ServiceSourceState {
+  days?: number;
+  models?: number;
+  rows?: number;
+  sessions?: number | null;
+  source: string;
+  spendUsd?: number;
+  status: "skipped" | "synced";
+}
+
+interface ServiceLogWriter {
+  log: (message?: unknown) => void;
 }
 
 type DoctorAuthConfig =
@@ -442,12 +470,19 @@ function serviceStatusEffect(options: { json?: boolean | undefined } = {}) {
       const now = new Date();
       const lockStatus = yield* readServiceLockStatus(paths.lockPath, now);
       const status = {
+        arch: state?.lastArch ?? null,
         autoUpdate: formatServiceStatusAutoUpdate(metadata),
         backend: paths.backend,
         installed,
+        lastAutoUpdated: state?.lastAutoUpdated ?? null,
+        lastDurationMs: state?.lastDurationMs ?? null,
         lastError: state?.lastError,
+        lastRows: state?.lastRows ?? null,
+        lastSources: state?.lastSources ?? [],
         lastSuccessAt: state?.lastSuccessAt ?? null,
         lastSuccessDate: serviceLastSuccessDate(state) ?? null,
+        lastUpserted: state?.lastUpserted ?? null,
+        lastVersion: state?.lastCliVersion ?? null,
         lock: formatServiceLockStatus(lockStatus),
         logPath: paths.logPath,
         schedule: metadata?.schedule ?? scheduleDescription(),
@@ -467,6 +502,20 @@ function serviceStatusEffect(options: { json?: boolean | undefined } = {}) {
         console.log(`Auto-update: ${status.autoUpdate}`);
         console.log(`Last success: ${status.lastSuccessAt ?? "never"}`);
         console.log(`Last success date: ${status.lastSuccessDate ?? "never"}`);
+        if (status.lastDurationMs !== null) {
+          console.log(`Last duration: ${status.lastDurationMs}ms`);
+        }
+        if (status.lastRows !== null) {
+          console.log(`Last rows: ${status.lastRows}`);
+        }
+        if (status.lastUpserted !== null) {
+          console.log(`Last upserted: ${status.lastUpserted}`);
+        }
+        if (status.lastVersion !== null) {
+          console.log(
+            `Last CLI: ${status.lastVersion}${status.arch === null ? "" : ` (${status.arch})`}`,
+          );
+        }
         if (status.lastError !== undefined) {
           console.log(`Last error: ${status.lastError}`);
         }
@@ -601,7 +650,12 @@ function serviceDoctorEffect(options: { json?: boolean | undefined } = {}) {
       ];
 
       if (options.json) {
-        yield* writeJson({ checks, recentLog: logTail, status: "ok" });
+        yield* writeJson({
+          checks,
+          recentLog: logTail,
+          state: state === null ? null : serviceStateJson(state),
+          status: "ok",
+        });
         return;
       }
 
@@ -630,7 +684,11 @@ function runServiceSyncOnce(paths: ServicePaths, options: ServiceRunOptions) {
     const console = yield* Effect.service(ConsoleService);
     const state = yield* readServiceState(paths.statePath);
     const currentState = state ?? { version: 1 as const };
-    const now = new Date();
+    const startedAt = new Date();
+    const startedAtIso = startedAt.toISOString();
+    const startedAtMs = startedAt.getTime();
+    const cliVersion = packageJson.version;
+    const cliArch = arch();
 
     if (options.scheduled) {
       const stored = yield* config.readConfig();
@@ -646,12 +704,19 @@ function runServiceSyncOnce(paths: ServicePaths, options: ServiceRunOptions) {
 
     yield* writeServiceState(paths.statePath, {
       ...currentState,
-      lastAttemptAt: now.toISOString(),
+      lastArch: cliArch,
+      lastAttemptAt: startedAtIso,
+      lastCliVersion: cliVersion,
       lastError: undefined,
       version: 1,
     }).pipe(Effect.mapError((cause) => new ServiceRunError({ cause })));
 
-    const result = yield* syncProgram({ dryRun: false, json: true, silent: true }).pipe(
+    const result = yield* syncProgram({
+      dryRun: false,
+      json: true,
+      silent: true,
+      ...(options.scheduled ? { uploadPolicy: SERVICE_UPLOAD_RETRY_POLICY } : {}),
+    }).pipe(
       Effect.match({
         onFailure: (cause) => ({ _tag: "failure" as const, cause }),
         onSuccess: (value) => ({ _tag: "success" as const, value }),
@@ -659,22 +724,32 @@ function runServiceSyncOnce(paths: ServicePaths, options: ServiceRunOptions) {
     );
 
     if (result._tag === "failure") {
-      yield* writeServiceState(paths.statePath, {
-        ...currentState,
-        lastAttemptAt: now.toISOString(),
-        lastError: String(result.cause),
-        version: 1,
-      }).pipe(Effect.ignore);
+      const failedState = serviceRunFailureState(currentState, {
+        arch: cliArch,
+        attemptAt: startedAtIso,
+        durationMs: Date.now() - startedAtMs,
+        error: String(result.cause),
+        version: cliVersion,
+      });
+      yield* writeServiceState(paths.statePath, failedState).pipe(Effect.ignore);
+      yield* writeScheduledServiceLog(console, options, serviceRunLogLine(failedState, "failure"));
       return yield* Effect.fail(new ServiceRunError({ cause: result.cause }));
     }
 
     const successAt = new Date().toISOString();
-    yield* writeServiceState(paths.statePath, {
-      ...currentState,
-      lastAttemptAt: now.toISOString(),
-      lastSuccessAt: successAt,
-      version: 1,
-    }).pipe(Effect.mapError((cause) => new ServiceRunError({ cause })));
+    const successState = serviceRunSuccessState(currentState, {
+      arch: cliArch,
+      attemptAt: startedAtIso,
+      autoUpdated,
+      durationMs: Date.now() - startedAtMs,
+      result: result.value,
+      successAt,
+      version: cliVersion,
+    });
+    yield* writeServiceState(paths.statePath, successState).pipe(
+      Effect.mapError((cause) => new ServiceRunError({ cause })),
+    );
+    yield* writeScheduledServiceLog(console, options, serviceRunLogLine(successState, "success"));
 
     if (autoUpdated && metadata !== null) {
       yield* refreshServiceAfterUpdate({
@@ -706,6 +781,113 @@ function runServiceSyncOnce(paths: ServicePaths, options: ServiceRunOptions) {
       upserted: result.value.upserted ?? 0,
     };
   });
+}
+
+function serviceRunSuccessState(
+  currentState: ServiceState,
+  input: {
+    arch: string;
+    attemptAt: string;
+    autoUpdated: boolean;
+    durationMs: number;
+    result: SyncResult;
+    successAt: string;
+    version: string;
+  },
+): ServiceState {
+  return {
+    ...currentState,
+    lastArch: input.arch,
+    lastAttemptAt: input.attemptAt,
+    lastAutoUpdated: input.autoUpdated,
+    lastCliVersion: input.version,
+    lastDurationMs: input.durationMs,
+    lastError: undefined,
+    lastRows: input.result.rows,
+    lastSources: serviceSourcesForState(input.result),
+    lastSuccessAt: input.successAt,
+    lastUpserted: input.result.upserted ?? 0,
+    version: 1,
+  };
+}
+
+function serviceRunFailureState(
+  currentState: ServiceState,
+  input: {
+    arch: string;
+    attemptAt: string;
+    durationMs: number;
+    error: string;
+    version: string;
+  },
+): ServiceState {
+  return {
+    ...currentState,
+    lastArch: input.arch,
+    lastAttemptAt: input.attemptAt,
+    lastCliVersion: input.version,
+    lastDurationMs: input.durationMs,
+    lastError: input.error,
+    version: 1,
+  };
+}
+
+function serviceSourcesForState(result: SyncResult): ServiceSourceState[] {
+  return result.sourceResults.map((sourceResult) => {
+    const summary = sourceResult.summary;
+    if (summary === null) {
+      return {
+        source: sourceResult.source,
+        status: "skipped" as const,
+      };
+    }
+
+    return {
+      days: summary.days,
+      models: summary.models,
+      rows: summary.rows,
+      sessions: summary.sessions,
+      source: sourceResult.source,
+      spendUsd: summary.spendUsd,
+      status: "synced" as const,
+    };
+  });
+}
+
+function serviceRunLogLine(state: ServiceState, status: "failure" | "success") {
+  return {
+    arch: state.lastArch,
+    autoUpdated: state.lastAutoUpdated,
+    durationMs: state.lastDurationMs,
+    error: status === "failure" ? state.lastError : undefined,
+    event: "service_run",
+    rows: state.lastRows,
+    sources: state.lastSources,
+    status,
+    timestamp: new Date().toISOString(),
+    upserted: state.lastUpserted,
+    version: state.lastCliVersion,
+  };
+}
+
+function writeScheduledServiceLog(
+  console: ServiceLogWriter,
+  options: ServiceRunOptions,
+  line: ReturnType<typeof serviceRunLogLine>,
+): Effect.Effect<void> {
+  if (!options.scheduled) {
+    return Effect.void;
+  }
+
+  return Effect.sync(() => {
+    console.log(JSON.stringify(removeUndefined(line)));
+  });
+}
+
+function removeUndefined<T extends Record<string, unknown>>(value: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(value).filter((entry): entry is [string, unknown] => entry[1] !== undefined),
+  ) as Partial<T>;
 }
 
 function serviceLastSuccessDate(state: ServiceState | null): string | undefined {
@@ -907,9 +1089,16 @@ function writeServiceState(path: string, state: ServiceState): Effect.Effect<voi
 
 function serviceStateJson(state: ServiceState): Partial<ServiceState> {
   return {
+    ...(state.lastArch === undefined ? {} : { lastArch: state.lastArch }),
     ...(state.lastAttemptAt === undefined ? {} : { lastAttemptAt: state.lastAttemptAt }),
+    ...(state.lastAutoUpdated === undefined ? {} : { lastAutoUpdated: state.lastAutoUpdated }),
+    ...(state.lastCliVersion === undefined ? {} : { lastCliVersion: state.lastCliVersion }),
+    ...(state.lastDurationMs === undefined ? {} : { lastDurationMs: state.lastDurationMs }),
     ...(state.lastError === undefined ? {} : { lastError: state.lastError }),
+    ...(state.lastRows === undefined ? {} : { lastRows: state.lastRows }),
+    ...(state.lastSources === undefined ? {} : { lastSources: state.lastSources }),
     ...(state.lastSuccessAt === undefined ? {} : { lastSuccessAt: state.lastSuccessAt }),
+    ...(state.lastUpserted === undefined ? {} : { lastUpserted: state.lastUpserted }),
     version: state.version,
   };
 }
@@ -1782,6 +1971,9 @@ export {
   servicePathsEffect,
   servicePaths,
   serviceRunEffect,
+  serviceRunFailureState,
+  serviceRunLogLine,
+  serviceRunSuccessState,
   serviceStatusEffect,
   serviceUninstallEffect,
   runPackageManagerUpdate,
@@ -1805,4 +1997,5 @@ export type {
   ServiceInstallOptions,
   ServiceMetadata,
   ServicePaths,
+  ServiceState,
 };

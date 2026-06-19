@@ -14,8 +14,14 @@ import type { DatabaseError } from "../database";
 
 const ADMIN_EMAILS = ["alexandru@851.sh", "pondorasti@gmail.com"] as const;
 const STALE_THRESHOLD_MS = 6 * 60 * 60 * 1000;
-const NPM_LATEST_URL = "https://registry.npmjs.org/@851-labs%2Ftokenmaxxing/latest";
+const ROLLOUT_GRACE_MS = 2 * 60 * 60 * 1000;
+const NPM_PACKAGE_URL = "https://registry.npmjs.org/@851-labs%2Ftokenmaxxing";
 const LATEST_VERSION_CACHE_MS = 5 * 60 * 1000;
+
+interface LatestCliRelease {
+  publishedAt: string | null;
+  version: string | null;
+}
 
 interface AdminAccountSnapshot {
   email: string | null;
@@ -72,7 +78,7 @@ interface AdminRepositoryShape {
 }
 
 interface AdminServiceOptions {
-  fetchLatestCliVersion?: (() => Effect.Effect<string | null>) | undefined;
+  fetchLatestCliRelease?: (() => Effect.Effect<LatestCliRelease>) | undefined;
   now?: (() => Date) | undefined;
 }
 
@@ -88,7 +94,7 @@ function makeAdminService(options: AdminServiceOptions = {}) {
   return Effect.gen(function* () {
     const repository = yield* AdminRepository;
     const now = options.now ?? (() => new Date());
-    const fetchLatestCliVersion = options.fetchLatestCliVersion ?? defaultFetchLatestCliVersion;
+    const fetchLatestCliRelease = options.fetchLatestCliRelease ?? defaultFetchLatestCliRelease;
 
     return AdminService.of({
       listUsers: Effect.fn("AdminService.listUsers")(function* (userId) {
@@ -98,17 +104,19 @@ function makeAdminService(options: AdminServiceOptions = {}) {
         }
 
         const generatedAt = now();
-        const [latestCliVersion, snapshots] = yield* Effect.all([
-          fetchLatestCliVersion(),
+        const [latestCliRelease, snapshots] = yield* Effect.all([
+          fetchLatestCliRelease(),
           repository.listUserSnapshots().pipe(Effect.orDie),
         ]);
         const users = snapshots.map((snapshot) =>
-          adminUserDebugRow(snapshot, latestCliVersion, generatedAt),
+          adminUserDebugRow(snapshot, latestCliRelease, generatedAt),
         );
 
         return {
           generatedAt: generatedAt.toISOString(),
-          latestCliVersion,
+          latestCliPublishedAt: latestCliRelease.publishedAt,
+          latestCliVersion: latestCliRelease.version,
+          rolloutGraceHours: ROLLOUT_GRACE_MS / (60 * 60 * 1000),
           staleThresholdHours: STALE_THRESHOLD_MS / (60 * 60 * 1000),
           summary: adminSummary(users),
           users,
@@ -138,7 +146,7 @@ function isInternalAdmin(
 
 function adminUserDebugRow(
   snapshot: AdminUserSnapshot,
-  latestCliVersion: string | null,
+  latestCliRelease: LatestCliRelease,
   now: Date,
 ): typeof AdminUserDebugRow.Type {
   const latestDevice = latestDeviceFor(snapshot.devices);
@@ -167,7 +175,7 @@ function adminUserDebugRow(
     providers,
     revokedTokenCount,
     sources: snapshot.sources,
-    status: adminDeviceStatus(latestDevice, latestCliVersion, now),
+    status: adminDeviceStatus(latestDevice, latestCliRelease, now),
     tokenCount: snapshot.tokens.length,
     totalSpendUsd: snapshot.usage.totalSpendUsd,
     totalTokens: snapshot.usage.totalTokens,
@@ -184,7 +192,7 @@ function adminUserDebugRow(
 
 function adminDeviceStatus(
   device: AdminDeviceSnapshot | null,
-  latestCliVersion: string | null,
+  latestCliRelease: LatestCliRelease,
   now: Date,
 ): AdminDeviceStatus {
   if (device === null || device.lastSyncAt === null) {
@@ -200,16 +208,23 @@ function adminDeviceStatus(
     return "unknown";
   }
 
-  if (now.getTime() - lastSync > STALE_THRESHOLD_MS) {
+  const elapsedMs = now.getTime() - lastSync;
+  if (elapsedMs > STALE_THRESHOLD_MS) {
     return "stale";
   }
 
   if (
-    latestCliVersion !== null &&
+    latestCliRelease.version !== null &&
     device.version !== null &&
-    normalizeVersion(device.version) !== normalizeVersion(latestCliVersion)
+    normalizeVersion(device.version) !== normalizeVersion(latestCliRelease.version)
   ) {
-    return "outdated";
+    const publishedAt =
+      latestCliRelease.publishedAt === null ? Number.NaN : Date.parse(latestCliRelease.publishedAt);
+    if (!Number.isFinite(publishedAt)) {
+      return elapsedMs <= ROLLOUT_GRACE_MS ? "updating" : "stale";
+    }
+
+    return now.getTime() - publishedAt <= ROLLOUT_GRACE_MS ? "updating" : "stale";
   }
 
   return "latest";
@@ -225,10 +240,10 @@ function adminSummary(users: readonly (typeof AdminUserDebugRow.Type)[]) {
     }),
     {
       latest: 0,
-      outdated: 0,
       stale: 0,
       totalDevices: 0,
       totalUsers: 0,
+      updating: 0,
       unknown: 0,
     },
   );
@@ -266,31 +281,31 @@ function normalizeVersion(version: string): string {
   return version.trim().replace(/^v/i, "");
 }
 
-let latestVersionCache: { expiresAt: number; value: string | null } | null = null;
+let latestReleaseCache: { expiresAt: number; value: LatestCliRelease } | null = null;
 
-function defaultFetchLatestCliVersion(): Effect.Effect<string | null> {
+function defaultFetchLatestCliRelease(): Effect.Effect<LatestCliRelease> {
   const now = Date.now();
-  if (latestVersionCache !== null && latestVersionCache.expiresAt > now) {
-    return Effect.succeed(latestVersionCache.value);
+  if (latestReleaseCache !== null && latestReleaseCache.expiresAt > now) {
+    return Effect.succeed(latestReleaseCache.value);
   }
 
   return Effect.tryPromise({
     try: async () => {
-      const response = await fetch(NPM_LATEST_URL, {
+      const response = await fetch(NPM_PACKAGE_URL, {
         headers: { accept: "application/json" },
       });
       if (!response.ok) {
-        return null;
+        return noLatestCliRelease();
       }
 
       const body = (await response.json()) as unknown;
-      return latestVersionFromRegistryBody(body);
+      return latestReleaseFromRegistryBody(body);
     },
     catch: (cause) => cause,
   }).pipe(
-    Effect.catch(() => Effect.succeed(null)),
-    Effect.map((value: string | null) => {
-      latestVersionCache = {
+    Effect.catch(() => Effect.succeed(noLatestCliRelease())),
+    Effect.map((value) => {
+      latestReleaseCache = {
         expiresAt: now + LATEST_VERSION_CACHE_MS,
         value,
       };
@@ -299,13 +314,41 @@ function defaultFetchLatestCliVersion(): Effect.Effect<string | null> {
   );
 }
 
-function latestVersionFromRegistryBody(body: unknown): string | null {
-  if (body === null || typeof body !== "object" || !("version" in body)) {
-    return null;
+function noLatestCliRelease(): LatestCliRelease {
+  return { publishedAt: null, version: null };
+}
+
+function latestReleaseFromRegistryBody(body: unknown): LatestCliRelease {
+  if (body === null || typeof body !== "object") {
+    return noLatestCliRelease();
   }
 
-  const version = (body as { version?: unknown }).version;
-  return typeof version === "string" && version.length > 0 ? version : null;
+  const directVersion = (body as { version?: unknown }).version;
+  const distTags = (body as { "dist-tags"?: unknown })["dist-tags"];
+  const taggedVersion =
+    distTags !== null && typeof distTags === "object"
+      ? (distTags as { latest?: unknown }).latest
+      : undefined;
+  const version =
+    typeof taggedVersion === "string" && taggedVersion.length > 0
+      ? taggedVersion
+      : typeof directVersion === "string" && directVersion.length > 0
+        ? directVersion
+        : null;
+  if (version === null) {
+    return noLatestCliRelease();
+  }
+
+  const times = (body as { time?: unknown }).time;
+  const publishedAt =
+    times !== null && typeof times === "object"
+      ? (times as Record<string, unknown>)[version]
+      : undefined;
+
+  return {
+    publishedAt: typeof publishedAt === "string" && publishedAt.length > 0 ? publishedAt : null,
+    version,
+  };
 }
 
 export {
@@ -317,7 +360,7 @@ export {
   adminSummary,
   adminUserDebugRow,
   isInternalAdmin,
-  latestVersionFromRegistryBody,
+  latestReleaseFromRegistryBody,
   makeAdminService,
 };
 
@@ -330,4 +373,5 @@ export type {
   AdminTokenSnapshot,
   AdminUsageSnapshot,
   AdminUserSnapshot,
+  LatestCliRelease,
 };
