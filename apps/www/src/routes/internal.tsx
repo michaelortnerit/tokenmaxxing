@@ -124,9 +124,6 @@ function InternalPage() {
                   <div title={row.latestCheckInAt ?? undefined}>
                     {formatRelativeTime(row.latestCheckInAt, data.generatedAt)}
                   </div>
-                  <div className="break-all text-xs text-muted-foreground">
-                    {formatUtc(row.latestCheckInAt)}
-                  </div>
                 </td>
               </tr>
             ))}
@@ -212,19 +209,6 @@ function formatRelativeTime(value: string | null, now: string): string {
   }
 
   return `${Math.floor(hours / 24)}d ago`;
-}
-
-function formatUtc(value: string | null): string {
-  if (value === null) {
-    return "";
-  }
-
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) {
-    return "";
-  }
-
-  return date.toISOString().replace(".000Z", "Z");
 }
 
 const integer = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
