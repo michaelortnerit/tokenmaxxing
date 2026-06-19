@@ -82,19 +82,19 @@ function InternalPage() {
   const data = query.data ?? loaded.data;
 
   return (
-    <div className="px-4 pb-10 pt-8">
-      <header>
+    <>
+      <header className="px-4 py-8">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Internal</h1>
           <p className="mt-1 text-sm text-muted-foreground">{fleetSummary(data)}</p>
         </div>
-        <dl className="-mx-4 mt-6 grid gap-px border-y border-border bg-border text-sm sm:grid-cols-3">
-          <SummaryCell label="Latest CLI" value={formatVersion(data.latestCliVersion)} />
-          <SummaryCell label="Users" value={formatInteger(data.summary.totalUsers)} />
-          <SummaryCell label="Devices" value={formatInteger(data.summary.totalDevices)} />
-        </dl>
       </header>
-      <div className="-mx-4 mt-6 overflow-x-auto border-b border-border">
+      <dl className="grid gap-px border-y border-border bg-border text-sm sm:grid-cols-3">
+        <SummaryCell label="Latest CLI" value={formatVersion(data.latestCliVersion)} />
+        <SummaryCell label="Users" value={formatInteger(data.summary.totalUsers)} />
+        <SummaryCell label="Devices" value={formatInteger(data.summary.totalDevices)} />
+      </dl>
+      <div className="overflow-x-auto border-b border-border">
         <table className="w-full table-fixed text-left text-sm">
           <thead className="border-b border-border bg-muted/40 text-xs uppercase text-muted-foreground">
             <tr>
@@ -130,7 +130,7 @@ function InternalPage() {
           </tbody>
         </table>
       </div>
-    </div>
+    </>
   );
 }
 
