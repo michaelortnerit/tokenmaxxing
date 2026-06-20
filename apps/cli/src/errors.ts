@@ -277,9 +277,7 @@ function highlightCliFailureMessage(message: string): string {
 
 export {
   clackFailureForCliFailure,
-  failureForCause,
   isJsonArgv,
-  isUserFacingCliError,
   isVerboseArgv,
   renderCliFailure,
   verboseGlobalFlag,

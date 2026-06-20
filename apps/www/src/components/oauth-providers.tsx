@@ -112,4 +112,4 @@ function oauthProviderLabel(provider: OAuthProviderId): string {
 
 export { LOGIN_OAUTH_PROVIDERS, OAuthProviderButtons, oauthProviderLabel, oauthProviderLinks };
 
-export type { OAuthProviderId, OAuthProviderLink, OAuthProviderOptions };
+export type { OAuthProviderId };

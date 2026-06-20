@@ -115,4 +115,4 @@ const makeD1CliLoginRepository = Effect.fn("makeD1CliLoginRepository")(function*
 
 const CliLoginRepositoryLive = Layer.effect(CliLoginRepository, makeD1CliLoginRepository());
 
-export { CliLoginRepositoryLive, makeD1CliLoginRepository };
+export { CliLoginRepositoryLive };

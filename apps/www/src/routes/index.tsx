@@ -276,5 +276,3 @@ function FaqSection() {
 }
 
 export { Route };
-
-export type { LeaderboardSearch };

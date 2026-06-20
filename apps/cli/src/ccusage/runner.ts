@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 
 import { Data, Effect, Option } from "effect";
 
-import type { CcusageDailyReport, CcusageDay, CcusageSessionReport } from "./schema";
+import type { CcusageDailyReport, CcusageSessionReport } from "./schema";
 import { decodeDailyReport, decodeSessionReport } from "./schema";
 import type { CcusageSource } from "./sources";
 
@@ -26,15 +26,6 @@ interface RunOptions {
   since?: string | undefined;
 }
 
-function runCcusageSource(
-  source: CcusageSource,
-  options: RunOptions = {},
-): Effect.Effect<Option.Option<readonly CcusageDay[]>> {
-  return runCcusageDailyReport(source, options).pipe(
-    Effect.map(Option.map((report) => report.daily)),
-  );
-}
-
 function runCcusageDailyReport(
   source: CcusageSource,
   options: RunOptions = {},
@@ -54,15 +45,6 @@ function runCcusageDailyReport(
   }).pipe(
     // Missing runner, no data dir, malformed output: skip the source.
     Effect.catchCause(() => Effect.succeedNone),
-  );
-}
-
-function runCcusageSessionCount(
-  source: CcusageSource,
-  options: RunOptions = {},
-): Effect.Effect<Option.Option<number>> {
-  return runCcusageSessionReport(source, options).pipe(
-    Effect.map(Option.map((report) => report.sessions.length)),
   );
 }
 
@@ -147,12 +129,9 @@ function isMissingCommand(cause: unknown): boolean {
 }
 
 export {
-  CcusageRunError,
   dailyCcusageCommand,
   runCcusageDailyReport,
-  runCcusageSessionCount,
   runCcusageSessionReport,
-  runCcusageSource,
   sessionCcusageCommand,
 };
 

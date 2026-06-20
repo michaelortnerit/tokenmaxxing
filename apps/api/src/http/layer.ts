@@ -307,6 +307,4 @@ const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
   fileWebResponse: () => Effect.die("HttpPlatform.fileWebResponse not supported"),
 });
 
-export { makeApiHttpEffect, makeApiLayer };
-
-export type { ApiLayerOptions };
+export { makeApiHttpEffect };

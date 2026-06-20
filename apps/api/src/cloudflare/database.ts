@@ -16,4 +16,4 @@ const Database = Cloudflare.D1Database(
   })),
 ).pipe(RemovalPolicy.retain());
 
-export { Database, databaseNameForStage };
+export { Database };

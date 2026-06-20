@@ -198,4 +198,4 @@ function Legend({
 
 export { Legend, StackedBars };
 
-export type { LegendEntry, StackedDay, ValueFormatter };
+export type { StackedDay };

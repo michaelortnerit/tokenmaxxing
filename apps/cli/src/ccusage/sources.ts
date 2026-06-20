@@ -41,6 +41,6 @@ function resolveSources(names: readonly string[]): {
   return { invalid, sources };
 }
 
-export { CCUSAGE_SOURCES, DEFAULT_SOURCE_NAMES, resolveSources };
+export { DEFAULT_SOURCE_NAMES, resolveSources };
 
 export type { CcusageSource };

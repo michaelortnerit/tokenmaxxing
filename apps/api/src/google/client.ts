@@ -105,6 +105,4 @@ function buildGoogleAuthorizeUrl(
   return url.toString();
 }
 
-export { buildGoogleAuthorizeUrl, GoogleApiError, GoogleClient, makeGoogleClient };
-
-export type { GoogleClientShape };
+export { buildGoogleAuthorizeUrl, GoogleClient, makeGoogleClient };

@@ -69,8 +69,6 @@ const decodeSessionReport = Schema.decodeUnknownEffect(CcusageSessionReport);
 export {
   CcusageDailyReport,
   CcusageDay,
-  CcusageModelBreakdown,
-  CcusageModelEntry,
   CcusageSessionReport,
   decodeDailyReport,
   decodeSessionReport,

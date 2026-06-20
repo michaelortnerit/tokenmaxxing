@@ -199,6 +199,4 @@ function collectModelEntries(day: CcusageDay): ModelTotals[] {
   return entries;
 }
 
-export { aggregateDays, parseRawUsageReports, PARSER_VERSION };
-
-export type { ParsedRawUsageReports };
+export { parseRawUsageReports, PARSER_VERSION };

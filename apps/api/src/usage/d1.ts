@@ -160,4 +160,4 @@ const makeD1UsageRepository = Effect.fn("makeD1UsageRepository")(function* () {
 
 const UsageRepositoryLive = Layer.effect(UsageRepository, makeD1UsageRepository());
 
-export { makeD1UsageRepository, UsageRepositoryLive };
+export { UsageRepositoryLive };

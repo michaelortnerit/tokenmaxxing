@@ -116,13 +116,6 @@ function resolveRuntimeUrls(env: AppConfigEnv): RuntimeUrls {
   return runtimeUrlTable[sandbox];
 }
 
-export { AppConfig, makeAppConfig };
+export { AppConfig };
 
-export type {
-  AppConfigEnv,
-  AppConfigSecrets,
-  AppConfigShape,
-  GitHubOAuthConfig,
-  GoogleOAuthConfig,
-  RuntimeUrls,
-};
+export type { AppConfigShape, GitHubOAuthConfig, GoogleOAuthConfig };

@@ -56,4 +56,4 @@ function whoamiEffect(options: { json: boolean }) {
   );
 }
 
-export { NotLoggedInError, whoamiCommand, whoamiEffect, WhoamiError };
+export { NotLoggedInError, whoamiCommand, whoamiEffect };

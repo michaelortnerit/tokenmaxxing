@@ -137,4 +137,4 @@ const makeD1TokensRepository = Effect.fn("makeD1TokensRepository")(function* () 
 
 const TokensRepositoryLive = Layer.effect(TokensRepository, makeD1TokensRepository());
 
-export { makeD1TokensRepository, TokensRepositoryLive };
+export { TokensRepositoryLive };

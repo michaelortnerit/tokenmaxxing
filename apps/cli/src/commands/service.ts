@@ -228,11 +228,6 @@ class ServiceRunError extends Data.TaggedError("ServiceRunError")<{
     "error: tokenmaxxing service run failed\nhint: inspect the service log for details";
 }
 
-class ServiceNotInstalledError extends Data.TaggedError("ServiceNotInstalledError")<{}> {
-  override message =
-    "error: tokenmaxxing service is not installed\nhint: run tokenmaxxing service install first";
-}
-
 const installCommand = Command.make(
   "install",
   {
@@ -1756,15 +1751,6 @@ function runExecutable(command: string, args: readonly string[]): Effect.Effect<
   });
 }
 
-function findTokenmaxxingCommandPath(
-  env: Record<string, string | undefined> = process.env,
-  platform: NodeJS.Platform = process.platform,
-): Effect.Effect<string | null, unknown> {
-  return findTokenmaxxingCommandInstall(env, platform).pipe(
-    Effect.map((install) => install?.commandPath ?? null),
-  );
-}
-
 function findTokenmaxxingCommandInstall(
   env: Record<string, string | undefined> = process.env,
   platform: NodeJS.Platform = process.platform,
@@ -2049,45 +2035,35 @@ function escapeXml(value: string): string {
 }
 
 export {
-  autoUpdateCommand,
   autoUpdateCommandDescription,
   backendForPlatform,
   capturedServiceEnv,
   detectAutoUpdateManager,
   findCommandOnPath,
   findTokenmaxxingCommandInstall,
-  findTokenmaxxingCommandPath,
   formatServiceLockStatus,
   formatServiceStatusAutoUpdate,
   isEphemeralCommandPath,
   isServiceInstalled,
   legacyServiceWrapperPaths,
   deterministicServiceJitterMs,
-  localDateKey,
   readServiceMetadata,
   renderLaunchdPlist,
   renderServiceWrapper,
-  renderSystemdService,
   renderSystemdTimer,
   refreshServiceAfterUpdate,
   scheduleDescription,
   serviceScheduledSyncSince,
   serviceCommand,
-  serviceDoctorEffect,
-  serviceInstallEffect,
   serviceInstallProgram,
   serviceLockStatus,
   serviceStateJson,
   servicePathsEffect,
   servicePaths,
-  serviceRunEffect,
   serviceRunFailureState,
   serviceRunLogLine,
   serviceRunSuccessState,
-  serviceStatusEffect,
-  serviceUninstallEffect,
   runPackageManagerUpdate,
-  runExecutable,
   windowsTaskNames,
   windowsTaskCreateArgs,
   ServiceAutoUpdateManagerError,
@@ -2095,7 +2071,6 @@ export {
   ServiceEnvTokenError,
   ServiceEphemeralCommandError,
   ServiceInstallError,
-  ServiceNotInstalledError,
   ServiceRunError,
   ServiceUninstallError,
   ServiceUnsupportedPlatformError,

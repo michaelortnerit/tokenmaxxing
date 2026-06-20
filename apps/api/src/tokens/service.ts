@@ -1,6 +1,5 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 
 import { DeviceNotFound, TokenNotFound } from "@tokenmaxxing/api-contract";
@@ -88,8 +87,6 @@ const makeTokensService = Effect.fn("makeTokensService")(function* () {
   });
 });
 
-const TokensServiceLive = Layer.effect(TokensService, makeTokensService());
+export { makeTokensService, TokensRepository, TokensService };
 
-export { makeTokensService, TokensRepository, TokensService, TokensServiceLive };
-
-export type { TokensRepositoryShape, TokensServiceShape };
+export type { TokensRepositoryShape };

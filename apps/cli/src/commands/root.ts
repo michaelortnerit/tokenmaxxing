@@ -28,4 +28,4 @@ const runTokenmaxxingCommand = Command.runWith(tokenmaxxingCommand, {
   version: packageJson.version,
 });
 
-export { runTokenmaxxingCommand, tokenmaxxingCommand };
+export { runTokenmaxxingCommand };

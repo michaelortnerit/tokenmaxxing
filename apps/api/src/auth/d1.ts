@@ -303,4 +303,4 @@ function toUserAccountSummary(account: UserAccount): UserAccountSummary {
   };
 }
 
-export { AuthRepositoryLive, makeD1AuthRepository };
+export { AuthRepositoryLive };

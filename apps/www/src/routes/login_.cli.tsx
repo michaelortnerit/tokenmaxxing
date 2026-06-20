@@ -16,8 +16,6 @@ const cliLoginSearchSchema = z.object({
   code: z.string().catch(""),
 });
 
-type CliLoginSearch = z.infer<typeof cliLoginSearchSchema>;
-
 const Route = createFileRoute("/login_/cli")({
   validateSearch: cliLoginSearchSchema,
   component: CliLoginPage,
@@ -105,5 +103,3 @@ function cliLoginRedirectPath(code: string): string {
 }
 
 export { Route };
-
-export type { CliLoginSearch };

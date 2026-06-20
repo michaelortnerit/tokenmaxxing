@@ -169,4 +169,4 @@ function groupBy<A, K>(values: readonly A[], key: (value: A) => K): Map<K, A[]> 
   return grouped;
 }
 
-export { AdminRepositoryLive, makeD1AdminRepository };
+export { AdminRepositoryLive };

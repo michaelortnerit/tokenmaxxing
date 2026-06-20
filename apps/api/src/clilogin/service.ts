@@ -1,6 +1,5 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 
 import { LoginCodeExpired, LoginCodeNotFound } from "@tokenmaxxing/api-contract";
@@ -183,18 +182,10 @@ const makeCliLoginService = Effect.fn("makeCliLoginService")(function* () {
   });
 });
 
-const CliLoginServiceLive = Layer.effect(CliLoginService, makeCliLoginService());
-
 function cliLoginVerificationUri(wwwOrigin: string, code: string): string {
   return `${wwwOrigin}/login/cli?code=${encodeURIComponent(code)}`;
 }
 
-export {
-  CliLoginRepository,
-  CliLoginService,
-  CliLoginServiceLive,
-  cliLoginVerificationUri,
-  makeCliLoginService,
-};
+export { CliLoginRepository, CliLoginService, cliLoginVerificationUri, makeCliLoginService };
 
-export type { CliLoginRepositoryShape, CliLoginServiceShape, PollResult, StartInput, StartResult };
+export type { CliLoginRepositoryShape };

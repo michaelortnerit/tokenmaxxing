@@ -15,4 +15,4 @@ const Bucket = Cloudflare.R2Bucket(
   })),
 ).pipe(RemovalPolicy.retain());
 
-export { Bucket, bucketNameForStage };
+export { Bucket };

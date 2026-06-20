@@ -29,5 +29,3 @@ function nextDateKey(date: string): string {
 }
 
 export { usageStreaks };
-
-export type { UsageStreaks };

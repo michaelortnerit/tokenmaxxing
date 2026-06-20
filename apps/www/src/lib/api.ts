@@ -80,5 +80,3 @@ async function signOut(): Promise<void> {
 }
 
 export { errorMessage, runApi, signOut };
-
-export type { TokenmaxxingApiClient };

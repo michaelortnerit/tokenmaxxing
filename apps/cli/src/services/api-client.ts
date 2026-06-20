@@ -44,4 +44,4 @@ const ApiClientLive = Layer.succeed(ApiClientService)({
 
 export { ApiClientLive, ApiClientService };
 
-export type { ApiClientOptions, TokenmaxxingApiClient };
+export type { TokenmaxxingApiClient };

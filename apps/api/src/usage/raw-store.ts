@@ -53,5 +53,3 @@ class RawUsageObjectStore extends Context.Service<RawUsageObjectStore, RawUsageO
 }
 
 export { RawUsageObjectStore, RawUsageStorageError };
-
-export type { RawUsageObjectStoreShape };

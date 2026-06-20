@@ -52,4 +52,3 @@ function Button({ variant, size, fullWidth, className, type = "button", ...rest 
 }
 
 export { Button, buttonClassName };
-export type { ButtonVariant, ButtonSize };

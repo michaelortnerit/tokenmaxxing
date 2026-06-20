@@ -192,27 +192,6 @@ function humanLog(level: HumanLogLevel, message: string, options: HumanOutputOpt
   });
 }
 
-function humanNote(title: string, message: string, options: HumanOutputOptions = {}) {
-  return Effect.gen(function* () {
-    if (!shouldWriteHumanOutput(options)) {
-      return;
-    }
-
-    const output = yield* Effect.service(ConsoleService);
-    yield* Effect.sync(() => {
-      if (shouldUseClack()) {
-        prompts.note(
-          formatClackRow(formatStatusMessage(message)),
-          formatClackRow(formatStatusMessage(title)),
-        );
-      } else {
-        output.log(formatStatusMessage(title));
-        output.log(formatStatusMessage(message));
-      }
-    });
-  });
-}
-
 function humanSpinner(message: string, options: HumanOutputOptions = {}) {
   return Effect.gen(function* () {
     const output = yield* Effect.service(ConsoleService);
@@ -527,13 +506,9 @@ export {
   humanConfirm,
   humanFailure,
   humanFrame,
-  humanIntro,
   humanLog,
-  humanNote,
-  humanOutro,
   humanSpinner,
   shouldUseClack,
-  shouldWriteHumanOutput,
   writeJson,
 };
 

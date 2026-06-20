@@ -1,7 +1,6 @@
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 
 import type { DatabaseError } from "../database";
@@ -246,8 +245,6 @@ const makeAuthService = Effect.fn("makeAuthService")(function* () {
   }
 });
 
-const AuthServiceLive = Layer.effect(AuthService, makeAuthService());
-
 function normalizeOAuthProfile(profile: OAuthProfile): OAuthProfile {
   return {
     ...profile,
@@ -285,14 +282,7 @@ function slugifyLogin(value: string): string {
   return slug.length === 0 ? "user" : slug;
 }
 
-export {
-  AccountLinkConflict,
-  AuthRepository,
-  AuthService,
-  AuthServiceLive,
-  loginBaseFromProfile,
-  makeAuthService,
-};
+export { AccountLinkConflict, AuthRepository, AuthService, makeAuthService };
 
 export type {
   AuthRepositoryShape,

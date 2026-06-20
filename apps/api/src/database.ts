@@ -43,5 +43,3 @@ class Drizzle extends Context.Service<Drizzle, DrizzleShape>()("@tokenmaxxing/ap
 }
 
 export { DatabaseError, Drizzle };
-
-export type { D1ConnectionLike, DrizzleShape };

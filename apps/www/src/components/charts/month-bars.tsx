@@ -143,5 +143,3 @@ function MonthBars({ months }: { months: MonthPoint[] }) {
 }
 
 export { MonthBars };
-
-export type { MonthPoint };

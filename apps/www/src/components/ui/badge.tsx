@@ -21,4 +21,3 @@ function Badge({ variant = "muted", children }: { variant?: BadgeVariant; childr
 }
 
 export { Badge };
-export type { BadgeVariant };

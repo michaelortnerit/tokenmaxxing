@@ -176,4 +176,4 @@ const makeD1ProfilesRepository = Effect.fn("makeD1ProfilesRepository")(function*
 
 const ProfilesRepositoryLive = Layer.effect(ProfilesRepository, makeD1ProfilesRepository());
 
-export { makeD1ProfilesRepository, ProfilesRepositoryLive };
+export { ProfilesRepositoryLive };

@@ -13,8 +13,6 @@ const loginSearchSchema = z.object({
   redirect: loginRedirectSchema,
 });
 
-type LoginSearch = z.infer<typeof loginSearchSchema>;
-
 const Route = createFileRoute("/login")({
   validateSearch: loginSearchSchema,
   component: LoginPage,
@@ -59,5 +57,3 @@ function sanitizeLoginRedirectPath(value: string): string | undefined {
 }
 
 export { Route };
-
-export type { LoginSearch };

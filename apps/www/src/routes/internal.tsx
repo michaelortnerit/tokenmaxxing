@@ -226,7 +226,3 @@ function formatInteger(value: number): string {
 }
 
 export { Route };
-
-export { fetchInternalAdminData, fleetSummary, formatRelativeTime, loadInternalRoute };
-
-export type { InternalAdminLoadResult };

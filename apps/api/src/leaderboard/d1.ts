@@ -57,4 +57,4 @@ const LeaderboardRepositoryLive = Layer.effect(
   makeD1LeaderboardRepository(),
 );
 
-export { LeaderboardRepositoryLive, makeD1LeaderboardRepository };
+export { LeaderboardRepositoryLive };

@@ -78,5 +78,3 @@ function ChartTooltip({
 }
 
 export { anchorBesideBar, anchorLeft, ChartTooltip };
-
-export type { TooltipRow };

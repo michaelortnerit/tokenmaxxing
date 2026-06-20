@@ -272,17 +272,12 @@ const ConfigLive = Layer.succeed(ConfigService)({
 });
 
 export {
-  clearTokenProgram,
   ConfigLive,
   ConfigReadError,
   ConfigService,
   ConfigWriteError,
-  ensureDeviceIdProgram,
   getConfigPath,
-  hasEnvTokenProgram,
   readConfigProgram,
-  writeConfigProgram,
-  writeTokenProgram,
 };
 
-export type { ClearTokenResult, CliConfig, ConfigError, StoredCliConfig };
+export type { CliConfig, ConfigError };

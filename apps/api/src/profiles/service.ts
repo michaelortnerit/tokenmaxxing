@@ -1,6 +1,5 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 
 import { UserNotFound } from "@tokenmaxxing/api-contract";
@@ -79,8 +78,6 @@ const makeProfilesService = Effect.fn("makeProfilesService")(function* () {
   });
 });
 
-const ProfilesServiceLive = Layer.effect(ProfilesService, makeProfilesService());
+export { makeProfilesService, ProfilesRepository, ProfilesService };
 
-export { makeProfilesService, ProfilesRepository, ProfilesService, ProfilesServiceLive };
-
-export type { DailyQuery, ProfilesRepositoryShape, ProfilesServiceShape };
+export type { ProfilesRepositoryShape };

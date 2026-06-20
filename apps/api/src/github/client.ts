@@ -132,6 +132,4 @@ function buildAuthorizeUrl(config: GitHubOAuthConfig, redirectUri: string, state
   return url.toString();
 }
 
-export { buildAuthorizeUrl, GitHubApiError, GitHubClient, makeGitHubClient };
-
-export type { GitHubClientShape };
+export { buildAuthorizeUrl, GitHubClient, makeGitHubClient };

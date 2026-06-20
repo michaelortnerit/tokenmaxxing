@@ -136,7 +136,6 @@ function parseBootstrapServiceOption(value: string | undefined) {
 
 export {
   bootstrapCommand,
-  bootstrapEffect,
   bootstrapProgram,
   BootstrapCancelledError,
   BootstrapServiceDecisionRequiredError,

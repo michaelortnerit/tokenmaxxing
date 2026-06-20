@@ -1,6 +1,5 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 
 import type {
   LeaderboardEntry,
@@ -71,14 +70,6 @@ const makeLeaderboardService = Effect.fn("makeLeaderboardService")(function* () 
   });
 });
 
-const LeaderboardServiceLive = Layer.effect(LeaderboardService, makeLeaderboardService());
+export { LeaderboardRepository, LeaderboardService, makeLeaderboardService, windowStart };
 
-export {
-  LeaderboardRepository,
-  LeaderboardService,
-  LeaderboardServiceLive,
-  makeLeaderboardService,
-  windowStart,
-};
-
-export type { LeaderboardRepositoryShape, LeaderboardServiceShape };
+export type { LeaderboardRepositoryShape };

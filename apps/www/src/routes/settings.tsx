@@ -420,14 +420,4 @@ function deviceDeleteInvalidationKeys(login: string): DeviceDeleteInvalidationKe
   return [devicesQueryOptions.queryKey, tokensQueryOptions.queryKey, ["profile", login]];
 }
 
-export {
-  accountLabel,
-  confirmDeviceDelete,
-  deviceDeleteConfirmationMessage,
-  deviceDeleteInvalidationKeys,
-  fetchSettingsData,
-  fetchSettingsSession,
-  loadSettingsRoute,
-  Route,
-  seedSettingsData,
-};
+export { Route };

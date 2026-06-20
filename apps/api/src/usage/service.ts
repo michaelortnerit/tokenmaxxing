@@ -1,6 +1,5 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 
 import { DeviceMissing } from "@tokenmaxxing/api-contract";
 import type {
@@ -251,14 +250,6 @@ function writeStructuredUsage(
 
 const textEncoder = new TextEncoder();
 
-const UsageServiceLive = Layer.effect(UsageService, makeUsageService());
+export { makeUsageService, UsageRepository, UsageService };
 
-export { makeUsageService, UsageRepository, UsageService, UsageServiceLive };
-
-export type {
-  StoredRawUsageReport,
-  SyncResult,
-  UsageDevice,
-  UsageRepositoryShape,
-  UsageServiceShape,
-};
+export type { StoredRawUsageReport, SyncResult, UsageRepositoryShape };

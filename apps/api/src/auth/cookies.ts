@@ -74,5 +74,3 @@ function sessionTokenFrom(request: HttpServerRequest.HttpServerRequest): string 
 }
 
 export { cookie, cookieScopeFor, readCookie, SESSION_COOKIE, sessionTokenFrom, STATE_COOKIE };
-
-export type { CookieScope };

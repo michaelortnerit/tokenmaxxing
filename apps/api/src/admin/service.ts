@@ -1,6 +1,5 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 
 import {
   Forbidden,
@@ -125,8 +124,6 @@ function makeAdminService(options: AdminServiceOptions = {}) {
     });
   });
 }
-
-const AdminServiceLive = Layer.effect(AdminService, makeAdminService());
 
 function isInternalAdmin(
   repository: AdminRepositoryShape,
@@ -352,26 +349,11 @@ function latestReleaseFromRegistryBody(body: unknown): LatestCliRelease {
 }
 
 export {
-  ADMIN_EMAILS,
   AdminRepository,
   AdminService,
-  AdminServiceLive,
   adminDeviceStatus,
-  adminSummary,
-  adminUserDebugRow,
-  isInternalAdmin,
   latestReleaseFromRegistryBody,
   makeAdminService,
 };
 
-export type {
-  AdminAccountSnapshot,
-  AdminDeviceSnapshot,
-  AdminRepositoryShape,
-  AdminServiceOptions,
-  AdminServiceShape,
-  AdminTokenSnapshot,
-  AdminUsageSnapshot,
-  AdminUserSnapshot,
-  LatestCliRelease,
-};
+export type { AdminDeviceSnapshot, AdminRepositoryShape, AdminUserSnapshot, LatestCliRelease };
