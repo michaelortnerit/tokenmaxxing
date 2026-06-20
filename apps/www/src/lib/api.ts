@@ -3,6 +3,7 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
+import { createIsomorphicFn } from "@tanstack/react-start";
 import { TokenmaxxingApi } from "@tokenmaxxing/api-contract";
 
 import { resolveApiUrl } from "./config";
@@ -20,10 +21,10 @@ interface ApiClientHandle {
   run<A, E>(effect: Effect.Effect<A, E, never>): Promise<A>;
 }
 
-function createApiClient(apiUrl: string): ApiClientHandle {
+function createApiClient(apiUrl: string, requestInit: RequestInit): ApiClientHandle {
   const layer = Layer.mergeAll(
     FetchHttpClient.layer,
-    Layer.succeed(FetchHttpClient.RequestInit, { credentials: "include" }),
+    Layer.succeed(FetchHttpClient.RequestInit, requestInit),
   );
   const runtime = ManagedRuntime.make(layer);
 
@@ -40,15 +41,36 @@ function createApiClient(apiUrl: string): ApiClientHandle {
 
 let handle: ApiClientHandle | null = null;
 
-function clientHandle(): ApiClientHandle {
-  handle ??= createApiClient(resolveApiUrl());
+async function clientHandle(): Promise<ApiClientHandle> {
+  if (typeof window === "undefined") {
+    return createApiClient(resolveApiUrl(), await serverRequestInit());
+  }
+
+  handle ??= createApiClient(resolveApiUrl(), { credentials: "include" });
   return handle;
+}
+
+const requestCookie = createIsomorphicFn()
+  .client(() => undefined)
+  .server(async () => {
+    const { getRequestHeader } = await import("@tanstack/react-start/server");
+
+    return getRequestHeader("cookie");
+  });
+
+async function serverRequestInit(): Promise<RequestInit> {
+  const cookie = await requestCookie();
+
+  return {
+    credentials: "include",
+    headers: cookie === undefined ? undefined : { cookie },
+  };
 }
 
 async function runApi<A, E>(
   call: (client: TokenmaxxingApiClient) => Effect.Effect<A, E, never>,
 ): Promise<A> {
-  const active = clientHandle();
+  const active = await clientHandle();
   const client = await active.client();
 
   return active.run(call(client));
@@ -56,19 +78,31 @@ async function runApi<A, E>(
 
 /** Best-effort message extraction from the contract's tagged errors. */
 function errorMessage(error: unknown, fallback: string): string {
-  if (typeof error === "object" && error !== null) {
-    const cause = (error as { cause?: unknown }).cause ?? error;
-    const inner =
-      typeof cause === "object" && cause !== null && "_tag" in cause && cause._tag === "Fail"
-        ? ((cause as { error?: unknown }).error ?? cause)
-        : cause;
-    const message = (inner as { message?: unknown }).message;
-    if (typeof message === "string" && message.length > 0) {
-      return message;
-    }
+  const inner = apiError(error);
+  const message = (inner as { message?: unknown }).message;
+  if (typeof message === "string" && message.length > 0) {
+    return message;
   }
 
   return fallback;
+}
+
+function isApiError(error: unknown, tag: string): boolean {
+  const inner = apiError(error);
+  const innerTag = (inner as { _tag?: unknown })._tag;
+
+  return innerTag === tag;
+}
+
+function apiError(error: unknown): unknown {
+  if (typeof error === "object" && error !== null) {
+    const cause = (error as { cause?: unknown }).cause ?? error;
+    return typeof cause === "object" && cause !== null && "_tag" in cause && cause._tag === "Fail"
+      ? ((cause as { error?: unknown }).error ?? cause)
+      : cause;
+  }
+
+  return error;
 }
 
 /** Raw routes (OAuth signout) sit outside the derived client. */
@@ -79,4 +113,4 @@ async function signOut(): Promise<void> {
   });
 }
 
-export { errorMessage, runApi, signOut };
+export { errorMessage, isApiError, runApi, signOut };

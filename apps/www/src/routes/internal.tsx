@@ -1,86 +1,39 @@
-import { useQuery, type QueryClient } from "@tanstack/react-query";
-import { createFileRoute, Link, redirect } from "@tanstack/react-router";
-import { createServerFn } from "@tanstack/react-start";
-import { getRequestHeader } from "@tanstack/react-start/server";
-import { AdminUsersResponse, type AdminDeviceStatus } from "@tokenmaxxing/api-contract";
-import * as Schema from "effect/Schema";
+import { useSuspenseQuery } from "@tanstack/react-query";
+import { createFileRoute, Link, notFound, redirect } from "@tanstack/react-router";
+import type { AdminDeviceStatus, AdminUsersResponse } from "@tokenmaxxing/api-contract";
 
 import { Avatar } from "../components/ui/avatar";
+import { isApiError } from "../lib/api";
 import { adminUsersQueryOptions } from "../lib/queries";
-import { resolveApiUrl } from "../lib/config";
 
 const INTERNAL_PATH = "/internal";
 
 type AdminUsersData = typeof AdminUsersResponse.Type;
-type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-
-type InternalAdminLoadResult =
-  | { status: "forbidden" }
-  | { data: AdminUsersData; status: "ok" }
-  | { status: "unauthenticated" };
-
-const requireInternalAdminData = createServerFn({ method: "GET" }).handler(async () =>
-  fetchInternalAdminData(getRequestHeader("cookie")),
-);
 
 const Route = createFileRoute("/internal")({
-  loader: ({ context }) => loadInternalRoute(context.queryClient),
+  loader: async ({ context }) => {
+    try {
+      await context.queryClient.ensureQueryData(adminUsersQueryOptions);
+    } catch (error) {
+      if (isApiError(error, "Unauthorized")) {
+        throw redirect({
+          search: { redirect: INTERNAL_PATH },
+          to: "/login",
+        });
+      }
+      if (isApiError(error, "Forbidden")) {
+        throw notFound();
+      }
+
+      throw error;
+    }
+  },
   component: InternalPage,
+  notFoundComponent: NotFoundPage,
 });
 
-async function loadInternalRoute(
-  queryClient: QueryClient,
-  loadAdminData: () => Promise<InternalAdminLoadResult> = requireInternalAdminData,
-): Promise<Exclude<InternalAdminLoadResult, { status: "unauthenticated" }>> {
-  const result = await loadAdminData();
-  if (result.status === "unauthenticated") {
-    throw redirect({
-      search: { redirect: INTERNAL_PATH },
-      to: "/login",
-    });
-  }
-
-  if (result.status === "ok") {
-    queryClient.setQueryData(adminUsersQueryOptions.queryKey, result.data);
-  }
-
-  return result;
-}
-
-async function fetchInternalAdminData(
-  cookie: string | undefined,
-  fetcher: Fetcher = fetch,
-): Promise<InternalAdminLoadResult> {
-  const response = await fetcher(`${resolveApiUrl()}/admin/users`, {
-    headers: cookie === undefined ? undefined : { cookie },
-  });
-
-  if (response.status === 401) {
-    return { status: "unauthenticated" };
-  }
-
-  if (response.status === 403 || response.status === 404) {
-    return { status: "forbidden" };
-  }
-
-  if (!response.ok) {
-    throw new Error(`Internal admin load failed with HTTP ${response.status}.`);
-  }
-
-  return {
-    data: await Schema.decodeUnknownPromise(AdminUsersResponse)(await response.json()),
-    status: "ok",
-  };
-}
-
 function InternalPage() {
-  const loaded = Route.useLoaderData();
-  if (loaded.status === "forbidden") {
-    return <NotFoundPage />;
-  }
-
-  const query = useQuery(adminUsersQueryOptions);
-  const data = query.data ?? loaded.data;
+  const { data } = useSuspenseQuery(adminUsersQueryOptions);
 
   return (
     <>
