@@ -1,10 +1,11 @@
 import { useQuery, type QueryClient } from "@tanstack/react-query";
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeader } from "@tanstack/react-start/server";
 import { AdminUsersResponse, type AdminDeviceStatus } from "@tokenmaxxing/api-contract";
 import * as Schema from "effect/Schema";
 
+import { Avatar } from "../components/ui/avatar";
 import { adminUsersQueryOptions } from "../lib/queries";
 import { resolveApiUrl } from "../lib/config";
 
@@ -109,7 +110,14 @@ function InternalPage() {
             {data.users.map((row) => (
               <tr className="border-b border-border last:border-b-0" key={row.user.id}>
                 <td className="p-3 align-top">
-                  <div className="font-medium">{row.user.login}</div>
+                  <Link
+                    className="flex items-center gap-2.5 font-medium hover:underline"
+                    params={{ user: row.user.login }}
+                    to="/$user"
+                  >
+                    <Avatar size={24} src={row.user.avatarUrl} />
+                    {row.user.login}
+                  </Link>
                 </td>
                 <td className="p-3 align-top font-medium">
                   {formatVersion(row.latestDevice?.version ?? null)}
