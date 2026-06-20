@@ -276,6 +276,23 @@ describe("renderServiceWrapper", () => {
     expect(wrapper).not.toContain("tmx_secret");
   });
 
+  it("rotates POSIX service logs before appending", () => {
+    const wrapper = renderServiceWrapper({
+      commandPath: "/usr/local/bin/tokenmaxxing",
+      env: { HOME: "/home/alex", PATH: "/usr/local/bin:/usr/bin" },
+      logPath: "/home/alex/.config/tokenmaxxing/service.log",
+      platform: "linux",
+    });
+
+    expect(wrapper).toContain("rotate_tokenmaxxing_log");
+    expect(wrapper).toContain('[ "$size" -lt 5242880 ] && return 0');
+    expect(wrapper).toContain('rm -f "$log.3"');
+    expect(wrapper).toContain('mv "$log" "$log.1"');
+    expect(
+      wrapper.indexOf("rotate_tokenmaxxing_log '/home/alex/.config/tokenmaxxing/service.log'"),
+    ).toBeLessThan(wrapper.indexOf("} >> '/home/alex/.config/tokenmaxxing/service.log' 2>&1"));
+  });
+
   it("renders the matching auto-update command for each package manager", () => {
     expect(autoUpdateCommandDescription("bun")).toBe(
       "bun update -g @851-labs/tokenmaxxing --latest --silent",
@@ -303,6 +320,10 @@ describe("renderServiceWrapper", () => {
     expect(wrapper).not.toContain("npm install");
     expect(wrapper).not.toContain("pnpm add");
     expect(wrapper).not.toContain("yarn global");
+    expect(wrapper).toContain("if %%~zA GEQ 5242880");
+    expect(wrapper).toContain('"%TOKENMAXXING_LOG%.3"');
+    expect(wrapper).toContain('move /y "%TOKENMAXXING_LOG%.1" "%TOKENMAXXING_LOG%.2"');
+    expect(wrapper).toContain('move /y "%TOKENMAXXING_LOG%" "%TOKENMAXXING_LOG%.1"');
     expect(wrapper).toContain("service run --scheduled");
   });
 });

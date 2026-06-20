@@ -27,6 +27,8 @@ const SERVICE_LOCK_STALE_MS = 2 * 60 * 60 * 1000;
 const SERVICE_INTERVAL_MINUTES = 5;
 const SERVICE_INTERVAL_SECONDS = SERVICE_INTERVAL_MINUTES * 60;
 const SERVICE_JITTER_MAX_MS = 60 * 1000;
+const SERVICE_LOG_MAX_BYTES = 5 * 1024 * 1024;
+const SERVICE_LOG_ROTATIONS = 3;
 const SERVICE_UPLOAD_RETRY_POLICY: UploadRetryPolicy = {
   attempts: 3,
   backoffMs: [1_000, 4_000, 16_000],
@@ -1492,11 +1494,40 @@ function renderPosixWrapper({
 set -eu
 ${exports}
 
+${renderPosixLogRotation(logPath)}
+
 {
   printf '\\n[%s] tokenmaxxing service sync\\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   ${shellQuote(commandPath)} ${serviceRunCommandArgs()}
 } >> ${shellQuote(logPath)} 2>&1
 `;
+}
+
+function renderPosixLogRotation(logPath: string): string {
+  const quotedLogPath = shellQuote(logPath);
+
+  return `rotate_tokenmaxxing_log() {
+  log=$1
+  [ -f "$log" ] || return 0
+  size=$(wc -c < "$log" 2>/dev/null | tr -d ' ' || printf '0')
+  case "$size" in
+    ''|*[!0-9]*) return 0 ;;
+  esac
+  [ "$size" -lt ${SERVICE_LOG_MAX_BYTES} ] && return 0
+
+  rm -f "$log.${SERVICE_LOG_ROTATIONS}" 2>/dev/null || true
+  i=${SERVICE_LOG_ROTATIONS}
+  while [ "$i" -gt 1 ]; do
+    prev=$((i - 1))
+    if [ -f "$log.$prev" ]; then
+      mv "$log.$prev" "$log.$i" 2>/dev/null || true
+    fi
+    i=$prev
+  done
+  mv "$log" "$log.1" 2>/dev/null || true
+}
+
+rotate_tokenmaxxing_log ${quotedLogPath} || true`;
 }
 
 function renderWindowsWrapper({
@@ -1515,10 +1546,28 @@ function renderWindowsWrapper({
   return `@echo off\r
 setlocal\r
 ${sets}\r
+${renderWindowsLogRotation(logPath)}\r
 >> ${cmdQuote(logPath)} echo [%DATE% %TIME%] tokenmaxxing service sync\r
 ${cmdQuote(commandPath)} ${serviceRunCommandArgs()} >> ${cmdQuote(logPath)} 2>&1\r
 exit /b %ERRORLEVEL%\r
 `;
+}
+
+function renderWindowsLogRotation(logPath: string): string {
+  const quotedLogPath = cmdQuote(logPath);
+  const moves = Array.from({ length: SERVICE_LOG_ROTATIONS - 1 }, (_, index) => {
+    const rotation = SERVICE_LOG_ROTATIONS - index;
+    const previousRotation = rotation - 1;
+
+    return `  if exist "%TOKENMAXXING_LOG%.${previousRotation}" move /y "%TOKENMAXXING_LOG%.${previousRotation}" "%TOKENMAXXING_LOG%.${rotation}" >nul 2>nul`;
+  }).join("\r\n");
+
+  return `set "TOKENMAXXING_LOG=${escapeCmdSetValue(logPath)}"\r
+if exist ${quotedLogPath} for %%A in (${quotedLogPath}) do if %%~zA GEQ ${SERVICE_LOG_MAX_BYTES} (\r
+  if exist "%TOKENMAXXING_LOG%.${SERVICE_LOG_ROTATIONS}" del /f /q "%TOKENMAXXING_LOG%.${SERVICE_LOG_ROTATIONS}" >nul 2>nul\r
+${moves}\r
+  move /y "%TOKENMAXXING_LOG%" "%TOKENMAXXING_LOG%.1" >nul 2>nul\r
+)`;
 }
 
 function renderLaunchdPlist(paths: ServicePaths): string {
