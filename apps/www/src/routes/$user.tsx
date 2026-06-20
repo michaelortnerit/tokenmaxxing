@@ -23,6 +23,11 @@ import { Code } from "../components/ui/code";
 import { profileDailyQueryOptions, profileQueryOptions } from "../lib/queries";
 
 const Route = createFileRoute("/$user")({
+  loader: ({ context, params }) =>
+    Promise.all([
+      context.queryClient.prefetchQuery(profileQueryOptions(params.user)),
+      context.queryClient.prefetchQuery(profileDailyQueryOptions(params.user)),
+    ]),
   component: ProfilePage,
 });
 

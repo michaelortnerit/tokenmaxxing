@@ -2,7 +2,12 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tansta
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeader } from "@tanstack/react-start/server";
-import { DeviceSummary, MeResponse, UserAccountSummary } from "@tokenmaxxing/api-contract";
+import {
+  CliTokenSummary,
+  DeviceSummary,
+  MeResponse,
+  UserAccountSummary,
+} from "@tokenmaxxing/api-contract";
 import * as Schema from "effect/Schema";
 import { Key, Laptop, Link } from "@phosphor-icons/react/ssr";
 
@@ -24,34 +29,111 @@ import {
 
 const SETTINGS_PATH = "/settings";
 
+const SettingsAccountsResponse = Schema.Struct({
+  accounts: Schema.Array(UserAccountSummary),
+});
+const SettingsDevicesResponse = Schema.Struct({
+  devices: Schema.Array(DeviceSummary),
+});
+const SettingsTokensResponse = Schema.Struct({
+  tokens: Schema.Array(CliTokenSummary),
+});
+
 type Me = typeof MeResponse.Type;
 type Device = typeof DeviceSummary.Type;
 type Account = typeof UserAccountSummary.Type;
+type SettingsAccounts = typeof SettingsAccountsResponse.Type;
+type SettingsDevices = typeof SettingsDevicesResponse.Type;
+type SettingsTokens = typeof SettingsTokensResponse.Type;
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 type DeviceDeleteInvalidationKey = readonly unknown[];
+type SettingsSecondaryDecoder<A> = (input: unknown) => Promise<A>;
 
-const requireSettingsSession = createServerFn({ method: "GET" }).handler(async () =>
-  fetchSettingsSession(getRequestHeader("cookie")),
+interface SettingsData {
+  accounts?: SettingsAccounts;
+  devices?: SettingsDevices;
+  me: Me;
+  tokens?: SettingsTokens;
+}
+
+type SettingsLoadResult = { data: SettingsData; status: "ok" } | { status: "unauthenticated" };
+
+const requireSettingsData = createServerFn({ method: "GET" }).handler(async () =>
+  fetchSettingsData(getRequestHeader("cookie")),
 );
 
 const Route = createFileRoute("/settings")({
-  beforeLoad: ({ context }) => guardSettingsRoute(context.queryClient),
+  loader: ({ context }) => loadSettingsRoute(context.queryClient),
   component: SettingsPage,
 });
 
-async function guardSettingsRoute(
+async function loadSettingsRoute(
   queryClient: QueryClient,
-  loadSession: () => Promise<Me | null> = requireSettingsSession,
+  loadData: () => Promise<SettingsLoadResult> = requireSettingsData,
 ): Promise<void> {
-  const me = await loadSession();
-  if (me === null) {
+  const result = await loadData();
+  if (result.status === "unauthenticated") {
     throw redirect({
       search: { redirect: SETTINGS_PATH },
       to: "/login",
     });
   }
 
-  queryClient.setQueryData(meQueryOptions.queryKey, me);
+  seedSettingsData(queryClient, result.data);
+}
+
+function seedSettingsData(queryClient: QueryClient, data: SettingsData): void {
+  queryClient.setQueryData(meQueryOptions.queryKey, data.me);
+  if (data.accounts !== undefined) {
+    queryClient.setQueryData(accountsQueryOptions.queryKey, data.accounts);
+  }
+  if (data.devices !== undefined) {
+    queryClient.setQueryData(devicesQueryOptions.queryKey, data.devices);
+  }
+  if (data.tokens !== undefined) {
+    queryClient.setQueryData(tokensQueryOptions.queryKey, data.tokens);
+  }
+}
+
+async function fetchSettingsData(
+  cookie: string | undefined,
+  fetcher: Fetcher = fetch,
+): Promise<SettingsLoadResult> {
+  const me = await fetchSettingsSession(cookie, fetcher);
+  if (me === null) {
+    return { status: "unauthenticated" };
+  }
+
+  const [accounts, devices, tokens] = await Promise.all([
+    fetchSettingsSecondary(
+      "/me/accounts",
+      cookie,
+      Schema.decodeUnknownPromise(SettingsAccountsResponse),
+      fetcher,
+    ),
+    fetchSettingsSecondary(
+      "/me/devices",
+      cookie,
+      Schema.decodeUnknownPromise(SettingsDevicesResponse),
+      fetcher,
+    ),
+    fetchSettingsSecondary(
+      "/me/tokens",
+      cookie,
+      Schema.decodeUnknownPromise(SettingsTokensResponse),
+      fetcher,
+    ),
+  ]);
+
+  return {
+    data: {
+      me,
+      ...(accounts === undefined ? {} : { accounts }),
+      ...(devices === undefined ? {} : { devices }),
+      ...(tokens === undefined ? {} : { tokens }),
+    },
+    status: "ok",
+  };
 }
 
 async function fetchSettingsSession(
@@ -71,6 +153,27 @@ async function fetchSettingsSession(
   }
 
   return Schema.decodeUnknownPromise(MeResponse)(await response.json());
+}
+
+async function fetchSettingsSecondary<A>(
+  path: string,
+  cookie: string | undefined,
+  decode: SettingsSecondaryDecoder<A>,
+  fetcher: Fetcher = fetch,
+): Promise<A | undefined> {
+  try {
+    const response = await fetcher(`${resolveApiUrl()}${path}`, {
+      headers: cookie === undefined ? undefined : { cookie },
+    });
+
+    if (!response.ok) {
+      return undefined;
+    }
+
+    return await decode(await response.json());
+  } catch {
+    return undefined;
+  }
 }
 
 function SettingsPage() {
@@ -322,7 +425,9 @@ export {
   confirmDeviceDelete,
   deviceDeleteConfirmationMessage,
   deviceDeleteInvalidationKeys,
+  fetchSettingsData,
   fetchSettingsSession,
-  guardSettingsRoute,
+  loadSettingsRoute,
   Route,
+  seedSettingsData,
 };

@@ -17,6 +17,7 @@
     "@phosphor-icons/react": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-router": "catalog:",
+    "@tanstack/react-router-ssr-query": "catalog:",
     "@tanstack/react-start": "catalog:",
     "@tokenmaxxing/api-contract": "workspace:*",
     "effect": "catalog:",

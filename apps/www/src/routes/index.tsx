@@ -31,6 +31,9 @@ const Route = createFileRoute("/")({
   search: {
     middlewares: [stripSearchParams<LeaderboardSearch>(DEFAULT_LEADERBOARD_SEARCH)],
   },
+  loaderDeps: ({ search }) => search,
+  loader: ({ context, deps }) =>
+    context.queryClient.prefetchQuery(leaderboardQueryOptions(deps.metric, deps.window)),
   component: LeaderboardPage,
 });
 
