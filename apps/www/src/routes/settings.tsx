@@ -1,25 +1,12 @@
-import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { createServerFn } from "@tanstack/react-start";
-import { getRequestHeader } from "@tanstack/react-start/server";
-import {
-  CliTokenSummary,
-  DeviceSummary,
-  MeResponse,
-  UserAccountSummary,
-} from "@tokenmaxxing/api-contract";
-import * as Schema from "effect/Schema";
+import { DeviceSummary, UserAccountSummary } from "@tokenmaxxing/api-contract";
 import { Key, Laptop, Link } from "@phosphor-icons/react/ssr";
 
-import {
-  oauthProviderLabel,
-  oauthProviderLinks,
-  type OAuthProviderId,
-} from "../components/oauth-providers";
+import { oauthProviderLabel, oauthProviderLinks } from "../components/oauth-providers";
 import { Button, buttonClassName } from "../components/ui/button";
 import { Code } from "../components/ui/code";
-import { errorMessage, runApi } from "../lib/api";
-import { resolveApiUrl } from "../lib/config";
+import { errorMessage, isApiError, runApi } from "../lib/api";
 import {
   accountsQueryOptions,
   devicesQueryOptions,
@@ -29,190 +16,49 @@ import {
 
 const SETTINGS_PATH = "/settings";
 
-const SettingsAccountsResponse = Schema.Struct({
-  accounts: Schema.Array(UserAccountSummary),
-});
-const SettingsDevicesResponse = Schema.Struct({
-  devices: Schema.Array(DeviceSummary),
-});
-const SettingsTokensResponse = Schema.Struct({
-  tokens: Schema.Array(CliTokenSummary),
-});
-
-type Me = typeof MeResponse.Type;
 type Device = typeof DeviceSummary.Type;
 type Account = typeof UserAccountSummary.Type;
-type SettingsAccounts = typeof SettingsAccountsResponse.Type;
-type SettingsDevices = typeof SettingsDevicesResponse.Type;
-type SettingsTokens = typeof SettingsTokensResponse.Type;
-type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 type DeviceDeleteInvalidationKey = readonly unknown[];
-type SettingsSecondaryDecoder<A> = (input: unknown) => Promise<A>;
-
-interface SettingsData {
-  accounts?: SettingsAccounts;
-  devices?: SettingsDevices;
-  me: Me;
-  tokens?: SettingsTokens;
-}
-
-type SettingsLoadResult = { data: SettingsData; status: "ok" } | { status: "unauthenticated" };
-
-const requireSettingsData = createServerFn({ method: "GET" }).handler(async () =>
-  fetchSettingsData(getRequestHeader("cookie")),
-);
 
 const Route = createFileRoute("/settings")({
-  loader: ({ context }) => loadSettingsRoute(context.queryClient),
+  loader: async ({ context }) => {
+    try {
+      await context.queryClient.ensureQueryData(meQueryOptions);
+      await Promise.all([
+        context.queryClient.ensureQueryData(accountsQueryOptions),
+        context.queryClient.ensureQueryData(devicesQueryOptions),
+        context.queryClient.ensureQueryData(tokensQueryOptions),
+      ]);
+    } catch (error) {
+      if (isApiError(error, "Unauthorized")) {
+        throw redirect({
+          search: { redirect: SETTINGS_PATH },
+          to: "/login",
+        });
+      }
+
+      throw error;
+    }
+  },
   component: SettingsPage,
 });
 
-async function loadSettingsRoute(
-  queryClient: QueryClient,
-  loadData: () => Promise<SettingsLoadResult> = requireSettingsData,
-): Promise<void> {
-  const result = await loadData();
-  if (result.status === "unauthenticated") {
-    throw redirect({
-      search: { redirect: SETTINGS_PATH },
-      to: "/login",
-    });
-  }
-
-  seedSettingsData(queryClient, result.data);
-}
-
-function seedSettingsData(queryClient: QueryClient, data: SettingsData): void {
-  queryClient.setQueryData(meQueryOptions.queryKey, data.me);
-  if (data.accounts !== undefined) {
-    queryClient.setQueryData(accountsQueryOptions.queryKey, data.accounts);
-  }
-  if (data.devices !== undefined) {
-    queryClient.setQueryData(devicesQueryOptions.queryKey, data.devices);
-  }
-  if (data.tokens !== undefined) {
-    queryClient.setQueryData(tokensQueryOptions.queryKey, data.tokens);
-  }
-}
-
-async function fetchSettingsData(
-  cookie: string | undefined,
-  fetcher: Fetcher = fetch,
-): Promise<SettingsLoadResult> {
-  const me = await fetchSettingsSession(cookie, fetcher);
-  if (me === null) {
-    return { status: "unauthenticated" };
-  }
-
-  const [accounts, devices, tokens] = await Promise.all([
-    fetchSettingsSecondary(
-      "/me/accounts",
-      cookie,
-      Schema.decodeUnknownPromise(SettingsAccountsResponse),
-      fetcher,
-    ),
-    fetchSettingsSecondary(
-      "/me/devices",
-      cookie,
-      Schema.decodeUnknownPromise(SettingsDevicesResponse),
-      fetcher,
-    ),
-    fetchSettingsSecondary(
-      "/me/tokens",
-      cookie,
-      Schema.decodeUnknownPromise(SettingsTokensResponse),
-      fetcher,
-    ),
-  ]);
-
-  return {
-    data: {
-      me,
-      ...(accounts === undefined ? {} : { accounts }),
-      ...(devices === undefined ? {} : { devices }),
-      ...(tokens === undefined ? {} : { tokens }),
-    },
-    status: "ok",
-  };
-}
-
-async function fetchSettingsSession(
-  cookie: string | undefined,
-  fetcher: Fetcher = fetch,
-): Promise<Me | null> {
-  const response = await fetcher(`${resolveApiUrl()}/me`, {
-    headers: cookie === undefined ? undefined : { cookie },
-  });
-
-  if (response.status === 401) {
-    return null;
-  }
-
-  if (!response.ok) {
-    throw new Error(`Settings session check failed with HTTP ${response.status}.`);
-  }
-
-  return Schema.decodeUnknownPromise(MeResponse)(await response.json());
-}
-
-async function fetchSettingsSecondary<A>(
-  path: string,
-  cookie: string | undefined,
-  decode: SettingsSecondaryDecoder<A>,
-  fetcher: Fetcher = fetch,
-): Promise<A | undefined> {
-  try {
-    const response = await fetcher(`${resolveApiUrl()}${path}`, {
-      headers: cookie === undefined ? undefined : { cookie },
-    });
-
-    if (!response.ok) {
-      return undefined;
-    }
-
-    return await decode(await response.json());
-  } catch {
-    return undefined;
-  }
-}
-
 function SettingsPage() {
-  const me = useQuery(meQueryOptions);
-
-  if (me.isPending) {
-    return (
-      <div className="px-4 py-8">
-        <p className="text-sm text-muted-foreground">Loading…</p>
-      </div>
-    );
-  }
-
-  if (me.isError) {
-    return (
-      <div className="px-4 py-8">
-        <p className="text-sm text-red-500">
-          {errorMessage(me.error, "Could not load your session; refresh and try again.")}
-        </p>
-      </div>
-    );
-  }
+  const { data: me } = useSuspenseQuery(meQueryOptions);
 
   return (
     <div className="flex flex-col gap-10 px-4 py-8">
       <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
       <ConnectedAccountsSection />
-      <DevicesSection login={me.data.user.login} />
+      <DevicesSection login={me.user.login} />
       <TokensSection />
     </div>
   );
 }
 
 function ConnectedAccountsSection() {
-  const accounts = useQuery(accountsQueryOptions);
-  const byProvider =
-    accounts.data === undefined
-      ? new Map<OAuthProviderId, Account>()
-      : new Map(accounts.data.accounts.map((account) => [account.provider, account]));
+  const { data } = useSuspenseQuery(accountsQueryOptions);
+  const byProvider = new Map(data.accounts.map((account) => [account.provider, account]));
   const providerLinks = oauthProviderLinks({ redirect: SETTINGS_PATH });
 
   return (
@@ -224,42 +70,34 @@ function ConnectedAccountsSection() {
         Sign in with any connected provider to reach the same profile.
       </p>
       <div className="-mx-4 mt-4 overflow-hidden border-y border-border">
-        {accounts.isPending ? (
-          <p className="p-4 text-sm text-muted-foreground">Loading…</p>
-        ) : accounts.isError ? (
-          <p className="p-4 text-sm text-red-500">
-            {errorMessage(accounts.error, "Could not load connected accounts.")}
-          </p>
-        ) : (
-          <table className="w-full text-sm">
-            <tbody>
-              {providerLinks.map((provider) => {
-                const account = byProvider.get(provider.id);
+        <table className="w-full text-sm">
+          <tbody>
+            {providerLinks.map((provider) => {
+              const account = byProvider.get(provider.id);
 
-                return (
-                  <tr className="border-b border-border last:border-b-0" key={provider.id}>
-                    <td className="p-3 font-medium">{oauthProviderLabel(provider.id)}</td>
-                    <td className="p-3 text-muted-foreground">
-                      {account === undefined ? "Not connected" : accountLabel(account)}
-                    </td>
-                    <td className="p-3 text-right">
-                      {account === undefined ? (
-                        <a
-                          className={buttonClassName({ variant: "primary", size: "sm" })}
-                          href={provider.href}
-                        >
-                          Connect
-                        </a>
-                      ) : (
-                        <span className="text-muted-foreground">Connected</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
+              return (
+                <tr className="border-b border-border last:border-b-0" key={provider.id}>
+                  <td className="p-3 font-medium">{oauthProviderLabel(provider.id)}</td>
+                  <td className="p-3 text-muted-foreground">
+                    {account === undefined ? "Not connected" : accountLabel(account)}
+                  </td>
+                  <td className="p-3 text-right">
+                    {account === undefined ? (
+                      <a
+                        className={buttonClassName({ variant: "primary", size: "sm" })}
+                        href={provider.href}
+                      >
+                        Connect
+                      </a>
+                    ) : (
+                      <span className="text-muted-foreground">Connected</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </section>
   );
@@ -267,7 +105,7 @@ function ConnectedAccountsSection() {
 
 function DevicesSection({ login }: { login: string }) {
   const queryClient = useQueryClient();
-  const devices = useQuery(devicesQueryOptions);
+  const { data } = useSuspenseQuery(devicesQueryOptions);
   const deleteDevice = useMutation({
     mutationFn: (device: Device) =>
       runApi((client) => client.me.deleteDevice({ params: { deviceId: device.id } })),
@@ -302,16 +140,14 @@ function DevicesSection({ login }: { login: string }) {
         </p>
       ) : null}
       <div className="-mx-4 mt-4 overflow-hidden border-y border-border">
-        {devices.isPending ? (
-          <p className="p-4 text-sm text-muted-foreground">Loading…</p>
-        ) : devices.isError || devices.data.devices.length === 0 ? (
+        {data.devices.length === 0 ? (
           <p className="p-4 text-sm text-muted-foreground">
             No devices yet — run <Code>tokenmaxxing login</Code> on a machine to add it.
           </p>
         ) : (
           <table className="w-full text-sm">
             <tbody>
-              {devices.data.devices.map((device) => (
+              {data.devices.map((device) => (
                 <tr className="border-b border-border last:border-b-0" key={device.id}>
                   <td className="p-3 font-medium">{device.name}</td>
                   <td className="p-3 text-muted-foreground">{device.platform}</td>
@@ -341,7 +177,7 @@ function DevicesSection({ login }: { login: string }) {
 
 function TokensSection() {
   const queryClient = useQueryClient();
-  const tokens = useQuery(tokensQueryOptions);
+  const { data } = useSuspenseQuery(tokensQueryOptions);
   const revoke = useMutation({
     mutationFn: (tokenId: string) =>
       runApi((client) => client.me.revokeToken({ params: { tokenId } })),
@@ -363,14 +199,12 @@ function TokensSection() {
         </p>
       ) : null}
       <div className="-mx-4 mt-4 overflow-hidden border-y border-border">
-        {tokens.isPending ? (
-          <p className="p-4 text-sm text-muted-foreground">Loading…</p>
-        ) : tokens.isError || tokens.data.tokens.length === 0 ? (
+        {data.tokens.length === 0 ? (
           <p className="p-4 text-sm text-muted-foreground">No CLI tokens yet.</p>
         ) : (
           <table className="w-full text-sm">
             <tbody>
-              {tokens.data.tokens.map((token) => (
+              {data.tokens.map((token) => (
                 <tr className="border-b border-border last:border-b-0" key={token.id}>
                   <td className="p-3 font-medium">{token.name ?? "unnamed"}</td>
                   <td className="p-3 text-muted-foreground">

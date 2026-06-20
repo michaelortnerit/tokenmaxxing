@@ -1,5 +1,5 @@
 import { Collapsible } from "@base-ui-components/react/collapsible";
-import { useQuery } from "@tanstack/react-query";
+import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, stripSearchParams, useNavigate } from "@tanstack/react-router";
 import type { LeaderboardMetric, LeaderboardWindow } from "@tokenmaxxing/api-contract";
 import type { ReactNode } from "react";
@@ -32,8 +32,9 @@ const Route = createFileRoute("/")({
     middlewares: [stripSearchParams<LeaderboardSearch>(DEFAULT_LEADERBOARD_SEARCH)],
   },
   loaderDeps: ({ search }) => search,
-  loader: ({ context, deps }) =>
-    context.queryClient.prefetchQuery(leaderboardQueryOptions(deps.metric, deps.window)),
+  loader: async ({ context, deps }) => {
+    await context.queryClient.ensureQueryData(leaderboardQueryOptions(deps.metric, deps.window));
+  },
   component: LeaderboardPage,
 });
 
@@ -153,7 +154,7 @@ const FAQ_ITEMS: { answer: ReactNode; question: string }[] = [
 function LeaderboardPage() {
   const { metric, window } = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
-  const leaderboard = useQuery(leaderboardQueryOptions(metric, window));
+  const { data } = useSuspenseQuery(leaderboardQueryOptions(metric, window));
 
   return (
     <>
@@ -182,13 +183,7 @@ function LeaderboardPage() {
       </header>
 
       <div className="overflow-hidden border-y border-border">
-        {leaderboard.isPending ? (
-          <p className="p-6 text-sm text-muted-foreground">Loading the rankings…</p>
-        ) : leaderboard.isError ? (
-          <p className="p-6 text-sm text-muted-foreground">
-            Could not load the leaderboard; refresh to retry.
-          </p>
-        ) : leaderboard.data.entries.length === 0 ? (
+        {data.entries.length === 0 ? (
           <p className="p-6 text-sm text-muted-foreground">
             Nobody on the board yet — be the first to sync.
           </p>
@@ -205,7 +200,7 @@ function LeaderboardPage() {
               </tr>
             </thead>
             <tbody>
-              {leaderboard.data.entries.map((entry) => (
+              {data.entries.map((entry) => (
                 <tr
                   className="border-b border-border transition-colors last:border-b-0 hover:bg-muted/40"
                   key={entry.user.id}

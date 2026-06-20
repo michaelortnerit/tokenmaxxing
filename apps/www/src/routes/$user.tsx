@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import type { ProfileDailyRow } from "@tokenmaxxing/api-contract";
 
@@ -23,11 +23,12 @@ import { Code } from "../components/ui/code";
 import { profileDailyQueryOptions, profileQueryOptions } from "../lib/queries";
 
 const Route = createFileRoute("/$user")({
-  loader: ({ context, params }) =>
-    Promise.all([
-      context.queryClient.prefetchQuery(profileQueryOptions(params.user)),
-      context.queryClient.prefetchQuery(profileDailyQueryOptions(params.user)),
-    ]),
+  loader: async ({ context, params }) => {
+    await Promise.all([
+      context.queryClient.ensureQueryData(profileQueryOptions(params.user)),
+      context.queryClient.ensureQueryData(profileDailyQueryOptions(params.user)),
+    ]);
+  },
   component: ProfilePage,
 });
 
@@ -42,30 +43,10 @@ function formatCount(value: number): string {
 
 function ProfilePage() {
   const { user } = Route.useParams();
-  const profile = useQuery(profileQueryOptions(user));
-  const daily = useQuery(profileDailyQueryOptions(user));
-
-  if (profile.isPending || daily.isPending) {
-    return (
-      <div className="px-4 py-8">
-        <p className="text-sm text-muted-foreground">Loading profile…</p>
-      </div>
-    );
-  }
-
-  if (profile.isError || daily.isError) {
-    return (
-      <div className="flex min-h-[360px] flex-col items-center justify-center px-4 py-8 text-center">
-        <h1 className="text-xl font-semibold">No profile for “{user}”</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Either it does not exist or nothing has been synced yet.
-        </p>
-      </div>
-    );
-  }
-
-  const { stats } = profile.data;
-  const owner = profile.data.user;
+  const { data: profile } = useSuspenseQuery(profileQueryOptions(user));
+  const { data: daily } = useSuspenseQuery(profileDailyQueryOptions(user));
+  const { stats } = profile;
+  const owner = profile.user;
 
   return (
     <>
@@ -74,14 +55,14 @@ function ProfilePage() {
         <h1 className="text-2xl font-semibold tracking-tight">{owner.login}</h1>
       </header>
 
-      {daily.data.days.length === 0 ? (
+      {daily.days.length === 0 ? (
         <div className="px-4">
           <Card className="p-6 text-sm text-muted-foreground">
             No usage yet — run <Code>tokenmaxxing sync</Code> to fill this page.
           </Card>
         </div>
       ) : (
-        <ProfileDashboard rows={daily.data.days} stats={stats} />
+        <ProfileDashboard rows={daily.days} stats={stats} />
       )}
     </>
   );
