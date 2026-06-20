@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { CheckCircle, TerminalWindow } from "@phosphor-icons/react/ssr";
+import { z } from "zod";
 
 import { LOGIN_OAUTH_PROVIDERS, OAuthProviderButtons } from "../components/oauth-providers";
 import { Button } from "../components/ui/button";
@@ -11,14 +12,14 @@ import { Code } from "../components/ui/code";
 import { errorMessage, runApi } from "../lib/api";
 import { meQueryOptions } from "../lib/queries";
 
-interface CliLoginSearch {
-  code: string;
-}
+const cliLoginSearchSchema = z.object({
+  code: z.string().catch(""),
+});
+
+type CliLoginSearch = z.infer<typeof cliLoginSearchSchema>;
 
 const Route = createFileRoute("/login_/cli")({
-  validateSearch: (search): CliLoginSearch => ({
-    code: typeof search["code"] === "string" ? search["code"] : "",
-  }),
+  validateSearch: cliLoginSearchSchema,
   component: CliLoginPage,
 });
 

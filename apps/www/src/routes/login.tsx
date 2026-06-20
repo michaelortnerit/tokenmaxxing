@@ -1,20 +1,24 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 
 import { LOGIN_OAUTH_PROVIDERS, OAuthProviderButtons } from "../components/oauth-providers";
 import { Card } from "../components/ui/card";
 
-const Route = createFileRoute("/login")({
-  validateSearch: (search): LoginSearch => ({
-    redirect: sanitizeLoginRedirectPath(
-      typeof search["redirect"] === "string" ? search["redirect"] : null,
-    ),
-  }),
-  component: LoginPage,
+const loginRedirectSchema = z.preprocess(
+  (value) => (typeof value === "string" ? sanitizeLoginRedirectPath(value) : undefined),
+  z.string().optional(),
+);
+
+const loginSearchSchema = z.object({
+  redirect: loginRedirectSchema,
 });
 
-interface LoginSearch {
-  redirect?: string | undefined;
-}
+type LoginSearch = z.infer<typeof loginSearchSchema>;
+
+const Route = createFileRoute("/login")({
+  validateSearch: loginSearchSchema,
+  component: LoginPage,
+});
 
 function LoginPage() {
   const { redirect } = Route.useSearch();
@@ -36,11 +40,7 @@ function LoginPage() {
   );
 }
 
-function sanitizeLoginRedirectPath(value: string | null): string | undefined {
-  if (value === null) {
-    return undefined;
-  }
-
+function sanitizeLoginRedirectPath(value: string): string | undefined {
   const trimmed = value.trim();
   if (!trimmed.startsWith("/") || trimmed.startsWith("//")) {
     return undefined;
