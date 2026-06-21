@@ -11,20 +11,30 @@ import { Menu } from "./ui/menu";
 function Nav() {
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur">
-      <div className="mx-4 flex h-14 max-w-5xl items-center justify-between border-x border-border px-4 lg:mx-auto">
-        <div className="flex items-baseline gap-6">
-          <Link className="text-sm font-semibold tracking-tight" to="/">
-            tokenmaxxing.sh
-          </Link>
+      <div className="mx-4 grid h-14 max-w-5xl grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center border-x border-border px-4 lg:mx-auto">
+        <Link className="min-w-0 truncate text-sm font-semibold tracking-tight" to="/">
+          tokenmaxxing.sh
+        </Link>
+        <nav className="flex items-baseline gap-6 justify-self-center" aria-label="Primary">
           <Link
             activeProps={{ className: "text-foreground" }}
             className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+            hash="leaderboard"
             to="/"
           >
             Leaderboard
           </Link>
+          <Link
+            className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+            hash="faq"
+            to="/"
+          >
+            FAQ
+          </Link>
+        </nav>
+        <div className="justify-self-end">
+          <UserMenu />
         </div>
-        <UserMenu />
       </div>
     </header>
   );

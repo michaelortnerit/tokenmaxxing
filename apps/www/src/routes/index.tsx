@@ -164,7 +164,11 @@ function LeaderboardPage() {
     <>
       <HeroSection />
 
-      <section aria-labelledby="homepage-leaderboard-title">
+      <section
+        className="scroll-mt-14"
+        id="leaderboard"
+        aria-labelledby="homepage-leaderboard-title"
+      >
         <header className="px-4 pt-8 pb-4">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
@@ -277,7 +281,7 @@ function HeroSection() {
         </code>
         <Button className="shrink-0" onClick={() => void copyBootstrapCommand()} size="md">
           {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-          {copied ? "Copied" : "Copy bootstrap command"}
+          {copied ? "Copied" : "Copy"}
         </Button>
       </div>
     </section>
@@ -286,7 +290,7 @@ function HeroSection() {
 
 function FaqSection() {
   return (
-    <section className="pt-8" aria-labelledby="homepage-faq-title">
+    <section className="scroll-mt-14 pt-8" id="faq" aria-labelledby="homepage-faq-title">
       <h2 id="homepage-faq-title" className="px-4 text-lg font-semibold tracking-tight">
         FAQ
       </h2>
