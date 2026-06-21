@@ -1,6 +1,6 @@
 ---
 name: release-cli
-description: Release a new version of the tokenmaxxing CLI to npm. Use when explicitly asked to release or publish @851-labs/tokenmaxxing, including checking main, bumping apps/cli/package.json, committing, tagging cli-vX.Y.Z, pushing, monitoring the Release CLI workflow, and smoke testing the published package.
+description: Release a new version of the tokenmaxxing CLI to npm. Use when explicitly asked to release or publish @851-labs/tokenmaxxing, including checking main, bumping apps/cli/package.json, updating CHANGELOG.md, committing, tagging cli-vX.Y.Z, pushing, monitoring the Release CLI workflow, and smoke testing the published package.
 ---
 
 # CLI Release Process
@@ -33,7 +33,19 @@ node -p "JSON.parse(require('node:fs').readFileSync('apps/cli/package.json', 'ut
 
 Use the printed version as `X.Y.Z` below.
 
-## Step 2: Run Checks
+## Step 2: Update Changelog
+
+Update `CHANGELOG.md` before running checks.
+
+1. Move the relevant `Unreleased` entries into a new `## X.Y.Z - YYYY-MM-DD` section.
+2. Keep a fresh empty `## Unreleased` section at the top.
+3. Keep entries concise and user-facing; do not paste raw commit logs.
+4. Include all notable CLI changes in the release section. Include web/API changes only when they
+   shipped since the previous CLI release and are user-visible or operationally important.
+
+Use today's date in `YYYY-MM-DD` format.
+
+## Step 3: Run Checks
 
 Run the existing checks directly.
 
@@ -47,18 +59,19 @@ bun --filter @851-labs/tokenmaxxing build
 
 Fix failures before continuing.
 
-## Step 3: Commit Version Bump
+## Step 4: Commit Version Bump
 
 Stage only the release files.
 
 ```sh
-git add apps/cli/package.json bun.lock
+git add CHANGELOG.md apps/cli/package.json bun.lock
 git commit -m "chore: release cli vX.Y.Z"
 ```
 
-If `bun.lock` did not change, omit it from `git add`.
+If `bun.lock` did not change, omit it from `git add`. Before committing, confirm `CHANGELOG.md`
+contains `## X.Y.Z - YYYY-MM-DD`.
 
-## Step 4: Create And Push Tag
+## Step 5: Create And Push Tag
 
 ```sh
 git tag cli-vX.Y.Z
@@ -68,7 +81,7 @@ git push origin cli-vX.Y.Z
 
 The `cli-vX.Y.Z` tag starts the `Release CLI` GitHub Actions workflow.
 
-## Step 5: Monitor Publish Workflow
+## Step 6: Monitor Publish Workflow
 
 Wait for the workflow run to appear and watch it.
 
@@ -90,7 +103,7 @@ If the workflow fails, inspect logs.
 gh run view --log-failed
 ```
 
-## Step 6: Smoke Test Published Package
+## Step 7: Smoke Test Published Package
 
 Use `npx` for exact-version install resolution, then confirm npm latest.
 
