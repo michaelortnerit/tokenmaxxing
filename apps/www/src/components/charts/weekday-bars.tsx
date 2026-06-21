@@ -13,9 +13,11 @@ const WEEKDAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 const HEIGHT = 180;
 const BAR_AREA = HEIGHT - 12;
+/** Fixed dark-blue tint; the peak day renders at full opacity, others dimmed. */
+const ACCENT = "#2563eb";
 
 /** `spend` is length-7, Monday-first: spend[0] = Mon … spend[6] = Sun. */
-function WeekdayBars({ accent, spend }: { accent: string; spend: number[] }) {
+function WeekdayBars({ spend }: { spend: number[] }) {
   const [hovered, setHovered] = useState<number | null>(null);
 
   const { max, peakIndex } = useMemo(() => {
@@ -71,7 +73,7 @@ function WeekdayBars({ accent, spend }: { accent: string; spend: number[] }) {
                 y={0}
               />
               <rect
-                fill={accent}
+                fill={ACCENT}
                 height={height}
                 opacity={isPeak ? 1 : 0.4}
                 width={barWidth}

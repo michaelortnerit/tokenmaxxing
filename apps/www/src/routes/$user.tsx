@@ -138,7 +138,6 @@ function ProfileDashboard({ rows, stats }: { rows: readonly DailyRow[]; stats: D
         <div className="mt-4">
           {derived.heatmap !== null ? (
             <Heatmap
-              accent={derived.accent}
               byDate={derived.spendByDate}
               first={derived.heatmap.first}
               last={derived.heatmap.last}
@@ -151,7 +150,7 @@ function ProfileDashboard({ rows, stats }: { rows: readonly DailyRow[]; stats: D
       <section className="bg-background p-5">
         <h2 className="font-medium">Most Active Time</h2>
         <div className="mt-4">
-          <WeekdayBars accent={derived.accent} spend={derived.spendByWeekday} />
+          <WeekdayBars spend={derived.spendByWeekday} />
         </div>
       </section>
 
@@ -167,7 +166,6 @@ function ProfileDashboard({ rows, stats }: { rows: readonly DailyRow[]; stats: D
 
 function deriveCharts(rows: readonly DailyRow[]) {
   const colors = familyColors(rows);
-  const accent = colors.values().next().value ?? "#f97316";
 
   // Per-day totals and per-day family segments.
   const spendByDate = new Map<string, number>();
@@ -254,7 +252,6 @@ function deriveCharts(rows: readonly DailyRow[]) {
       : [];
 
   return {
-    accent,
     heatmap: heatmapRange,
     months,
     outputTokens,

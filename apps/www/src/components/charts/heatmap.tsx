@@ -9,7 +9,6 @@ import { ChartTooltip } from "./tooltip";
  */
 
 interface HeatmapProps {
-  accent: string;
   /** date -> spend */
   byDate: Map<string, number>;
   first: string;
@@ -29,8 +28,10 @@ const CELL = 11;
 const GAP = 2;
 const LEFT = 28;
 const TOP = 16;
+/** Fixed green tint; rendered at varying opacity by intensity. */
+const ACCENT = "#22c55e";
 
-function Heatmap({ accent, byDate, first, last, segmentsByDate }: HeatmapProps) {
+function Heatmap({ byDate, first, last, segmentsByDate }: HeatmapProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [hovered, setHovered] = useState<HoveredCell | null>(null);
 
@@ -123,7 +124,7 @@ function Heatmap({ accent, byDate, first, last, segmentsByDate }: HeatmapProps) 
               const cy = TOP + dow * (CELL + GAP);
               return (
                 <rect
-                  fill={level === 0 ? "currentColor" : accent}
+                  fill={level === 0 ? "currentColor" : ACCENT}
                   height={CELL}
                   key={day}
                   onPointerEnter={(event) => {
