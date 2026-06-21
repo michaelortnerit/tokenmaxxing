@@ -60,11 +60,21 @@ function snapshot(input: Partial<AdminUserSnapshot> = {}): AdminUserSnapshot {
         provider: "google",
       },
     ],
+    deviceUsage: [
+      {
+        activeDays: 12,
+        deviceId: "device_123",
+        lastUsageDate: "2026-06-19",
+        sources: ["codex"],
+        totalSpendUsd: 34.56,
+        totalTokens: 123_456,
+      },
+    ],
     devices: [device()],
     sources: ["codex"],
     tokens: [
-      { lastUsedAt: "2026-06-19T19:31:00.000Z", revokedAt: null },
-      { lastUsedAt: null, revokedAt: "2026-06-18T00:00:00.000Z" },
+      { deviceId: "device_123", lastUsedAt: "2026-06-19T19:31:00.000Z", revokedAt: null },
+      { deviceId: "device_123", lastUsedAt: null, revokedAt: "2026-06-18T00:00:00.000Z" },
     ],
     usage: {
       activeDays: 12,
@@ -130,6 +140,27 @@ describe("AdminService.listUsers", () => {
     });
     expect(response.latestCliPublishedAt).toBe("2026-06-19T19:00:00.000Z");
     expect(response.rolloutGraceHours).toBe(2);
+    expect(response.devices[0]).toMatchObject({
+      activeDays: 12,
+      activeTokenCount: 1,
+      device: {
+        id: "device_123",
+        name: "Mac.localdomain",
+      },
+      isOutdated: false,
+      lastTokenUsedAt: "2026-06-19T19:31:00.000Z",
+      lastUsageDate: "2026-06-19",
+      latestCheckInAt: "2026-06-19T19:30:00.000Z",
+      revokedTokenCount: 1,
+      sources: ["codex"],
+      status: "healthy",
+      tokenCount: 2,
+      totalSpendUsd: 34.56,
+      totalTokens: 123_456,
+      user: {
+        login: "pondorasti",
+      },
+    });
     expect(response.users[0]).toMatchObject({
       activeTokenCount: 1,
       deviceCount: 1,
@@ -177,9 +208,116 @@ describe("AdminService.listUsers", () => {
       healthy: 1,
       outdated: 2,
       stale: 1,
+      totalDevices: 2,
       totalUsers: 2,
     });
-    expect(response.users.map((user) => user.status).sort()).toEqual(["healthy", "stale"]);
+    expect(response.devices.map((deviceRow) => deviceRow.status).sort()).toEqual([
+      "healthy",
+      "stale",
+    ]);
+    expect(response.devices.every((deviceRow) => deviceRow.isOutdated)).toBe(true);
+  });
+
+  it("keeps multiple devices for one user visible as separate fleet rows", async () => {
+    const service = await makeService(
+      makeRepository({
+        allowedEmails: ["alexandru@851.sh"],
+        snapshots: [
+          snapshot({
+            deviceUsage: [
+              {
+                activeDays: 4,
+                deviceId: "vps-6b1bc496",
+                lastUsageDate: "2026-06-13",
+                sources: ["codex"],
+                totalSpendUsd: 12.34,
+                totalTokens: 100_000,
+              },
+              {
+                activeDays: 11,
+                deviceId: "mac-joel",
+                lastUsageDate: "2026-06-19",
+                sources: ["claude", "codex"],
+                totalSpendUsd: 45.67,
+                totalTokens: 900_000,
+              },
+            ],
+            devices: [
+              device({
+                arch: "x64",
+                id: "vps-6b1bc496",
+                lastCheckInAt: "2026-06-19T19:45:00.000Z",
+                lastSyncAt: "2026-06-19T19:00:00.000Z",
+                name: "joel-vps",
+                platform: "linux",
+                serviceBackend: "launchd",
+                serviceReloadRequired: false,
+                serviceRepairAttemptedAt: "2026-06-19T19:10:00.000Z",
+                serviceRepairReason: "auto-updated",
+                serviceRepairStatus: "scheduled",
+                serviceSchedulerActive: true,
+                serviceStatus: "success",
+                serviceTemplateVersion: 2,
+                version: "0.5.4",
+              }),
+              device({
+                arch: "arm64",
+                id: "mac-joel",
+                lastCheckInAt: null,
+                lastSyncAt: "2026-06-19T12:00:00.000Z",
+                name: "Joels-MacBook-Pro.local",
+                platform: "darwin",
+                version: "0.5.4",
+              }),
+            ],
+            tokens: [
+              {
+                deviceId: "vps-6b1bc496",
+                lastUsedAt: "2026-06-19T19:45:00.000Z",
+                revokedAt: null,
+              },
+              {
+                deviceId: "mac-joel",
+                lastUsedAt: "2026-06-19T12:00:00.000Z",
+                revokedAt: null,
+              },
+            ],
+            user: {
+              avatarUrl: null,
+              createdAt: "2026-06-18T00:00:00.000Z",
+              id: "user_joel",
+              login: "joelbqz",
+              name: null,
+              updatedAt: "2026-06-19T00:00:00.000Z",
+            },
+          }),
+        ],
+      }),
+    );
+
+    const response = await Effect.runPromise(service.listUsers("user_123"));
+    const vps = response.devices.find((row) => row.device.id === "vps-6b1bc496");
+    const mac = response.devices.find((row) => row.device.id === "mac-joel");
+
+    expect(response.devices).toHaveLength(2);
+    expect(response.summary).toMatchObject({
+      healthy: 1,
+      repairNeeded: 0,
+      stale: 1,
+      totalDevices: 2,
+      totalUsers: 1,
+    });
+    expect(vps).toMatchObject({
+      lastUsageDate: "2026-06-13",
+      status: "healthy",
+      user: { login: "joelbqz" },
+    });
+    expect(mac).toMatchObject({
+      lastUsageDate: "2026-06-19",
+      status: "stale",
+      user: { login: "joelbqz" },
+    });
+    expect(adminDeviceRepairReason(vps?.device ?? null)).toBeNull();
   });
 
   it("allows the pondorasti Gmail address as an internal admin email", async () => {
@@ -246,7 +384,7 @@ describe("adminDeviceRepairReason", () => {
           serviceRepairStatus: "scheduled",
         }),
       ),
-    ).toBe("auto-updated");
+    ).toBeNull();
     expect(
       adminDeviceRepairReason(
         device({

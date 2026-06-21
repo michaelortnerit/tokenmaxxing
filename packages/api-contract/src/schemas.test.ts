@@ -2,6 +2,7 @@ import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vitest";
 
 import {
+  AdminUsersResponse,
   CliLoginStartInput,
   IngestUsageInput,
   ProfileDailyResponse,
@@ -104,5 +105,74 @@ describe("profile daily responses", () => {
         last: "2026-06-21",
       },
     });
+  });
+});
+
+describe("admin fleet responses", () => {
+  it("carries device owner, service, token, and usage telemetry", async () => {
+    const response = {
+      devices: [
+        {
+          activeDays: 7,
+          activeTokenCount: 1,
+          device: {
+            arch: "arm64",
+            createdAt: "2026-06-19T18:00:00.000Z",
+            id: "device_123",
+            lastCheckInAt: "2026-06-19T19:31:00.000Z",
+            lastSyncAt: "2026-06-19T19:30:00.000Z",
+            name: "Mac.localdomain",
+            platform: "darwin",
+            serviceBackend: "launchd",
+            serviceError: null,
+            serviceReloadRequired: false,
+            serviceRepairAttemptedAt: "2026-06-19T19:00:00.000Z",
+            serviceRepairCompletedAt: null,
+            serviceRepairError: null,
+            serviceRepairReason: "auto-updated",
+            serviceRepairStatus: "scheduled",
+            serviceSchedulerActive: true,
+            serviceStatus: "success",
+            serviceTemplateVersion: 2,
+            version: "0.5.4",
+          },
+          isOutdated: false,
+          lastTokenUsedAt: "2026-06-19T19:31:00.000Z",
+          lastUsageDate: "2026-06-19",
+          latestCheckInAt: "2026-06-19T19:31:00.000Z",
+          revokedTokenCount: 0,
+          sources: ["codex"],
+          status: "healthy",
+          tokenCount: 1,
+          totalSpendUsd: 12.34,
+          totalTokens: 123_456,
+          user: {
+            avatarUrl: null,
+            id: "user_123",
+            login: "pondorasti",
+            name: "Alexandru",
+          },
+        },
+      ],
+      generatedAt: "2026-06-19T20:00:00.000Z",
+      latestCliPublishedAt: "2026-06-19T19:00:00.000Z",
+      latestCliVersion: "0.5.4",
+      rolloutGraceHours: 2,
+      staleThresholdHours: 6,
+      summary: {
+        healthy: 1,
+        outdated: 0,
+        repairNeeded: 0,
+        stale: 0,
+        totalDevices: 1,
+        totalUsers: 1,
+        unknown: 0,
+      },
+      users: [],
+    };
+
+    await expect(Schema.decodeUnknownPromise(AdminUsersResponse)(response)).resolves.toEqual(
+      response,
+    );
   });
 });

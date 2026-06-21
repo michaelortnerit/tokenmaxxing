@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 
 import {
   Forbidden,
+  type AdminDeviceDebugRow,
   type AdminDeviceStatus,
   type AdminUserDebugRow,
   type AdminUsersResponse,
@@ -55,8 +56,18 @@ interface AdminDeviceSnapshot {
 }
 
 interface AdminTokenSnapshot {
+  deviceId: string | null;
   lastUsedAt: string | null;
   revokedAt: string | null;
+}
+
+interface AdminDeviceUsageSnapshot {
+  activeDays: number;
+  deviceId: string;
+  lastUsageDate: string | null;
+  sources: string[];
+  totalSpendUsd: number;
+  totalTokens: number;
 }
 
 interface AdminUsageSnapshot {
@@ -68,6 +79,7 @@ interface AdminUsageSnapshot {
 
 interface AdminUserSnapshot {
   accounts: AdminAccountSnapshot[];
+  deviceUsage: AdminDeviceUsageSnapshot[];
   devices: AdminDeviceSnapshot[];
   sources: string[];
   tokens: AdminTokenSnapshot[];
@@ -125,14 +137,16 @@ function makeAdminService(options: AdminServiceOptions = {}) {
         const users = snapshots.map((snapshot) =>
           adminUserDebugRow(snapshot, latestCliRelease, generatedAt),
         );
+        const devices = adminDeviceDebugRows(snapshots, latestCliRelease, generatedAt);
 
         return {
+          devices,
           generatedAt: generatedAt.toISOString(),
           latestCliPublishedAt: latestCliRelease.publishedAt,
           latestCliVersion: latestCliRelease.version,
           rolloutGraceHours: ROLLOUT_GRACE_MS / (60 * 60 * 1000),
           staleThresholdHours: STALE_THRESHOLD_MS / (60 * 60 * 1000),
-          summary: adminSummary(users, latestCliRelease),
+          summary: adminSummary(devices, snapshots.length),
           users,
         };
       }),
@@ -202,6 +216,53 @@ function adminUserDebugRow(
   };
 }
 
+function adminDeviceDebugRows(
+  snapshots: readonly AdminUserSnapshot[],
+  latestCliRelease: LatestCliRelease,
+  now: Date,
+): (typeof AdminDeviceDebugRow.Type)[] {
+  return snapshots
+    .flatMap((snapshot) =>
+      snapshot.devices.map((device) =>
+        adminDeviceDebugRow(snapshot, device, latestCliRelease, now),
+      ),
+    )
+    .sort(compareDeviceDebugRows);
+}
+
+function adminDeviceDebugRow(
+  snapshot: AdminUserSnapshot,
+  device: AdminDeviceSnapshot,
+  latestCliRelease: LatestCliRelease,
+  now: Date,
+): typeof AdminDeviceDebugRow.Type {
+  const tokens = snapshot.tokens.filter((token) => token.deviceId === device.id);
+  const activeTokenCount = tokens.filter((token) => token.revokedAt === null).length;
+  const usage = snapshot.deviceUsage.find((row) => row.deviceId === device.id);
+
+  return {
+    activeDays: usage?.activeDays ?? 0,
+    activeTokenCount,
+    device,
+    isOutdated: deviceVersionIsOutdated(device, latestCliRelease.version),
+    lastTokenUsedAt: maxIso(tokens.map((token) => token.lastUsedAt)),
+    lastUsageDate: usage?.lastUsageDate ?? null,
+    latestCheckInAt: latestDeviceCheckIn(device),
+    revokedTokenCount: tokens.length - activeTokenCount,
+    sources: usage?.sources ?? [],
+    status: adminDeviceStatus(device, latestCliRelease, now),
+    tokenCount: tokens.length,
+    totalSpendUsd: usage?.totalSpendUsd ?? 0,
+    totalTokens: usage?.totalTokens ?? 0,
+    user: {
+      avatarUrl: snapshot.user.avatarUrl,
+      id: snapshot.user.id,
+      login: snapshot.user.login,
+      name: snapshot.user.name,
+    },
+  };
+}
+
 function adminDeviceStatus(
   device: AdminDeviceSnapshot | null,
   _latestCliRelease: LatestCliRelease,
@@ -221,10 +282,6 @@ function adminDeviceStatus(
     return "repair-needed";
   }
 
-  if (device.arch === null && device.version === null) {
-    return "unknown";
-  }
-
   const lastSeenAt = latestDeviceCheckIn(device);
   if (lastSeenAt === null) {
     return "unknown";
@@ -240,16 +297,17 @@ function adminDeviceStatus(
     return "stale";
   }
 
+  if (device.arch === null && device.version === null) {
+    return "unknown";
+  }
+
   return "healthy";
 }
 
-function adminSummary(
-  users: readonly (typeof AdminUserDebugRow.Type)[],
-  latestCliRelease: LatestCliRelease,
-) {
-  return users.reduce(
-    (summary, user) => {
-      switch (user.status) {
+function adminSummary(devices: readonly (typeof AdminDeviceDebugRow.Type)[], totalUsers: number) {
+  return devices.reduce(
+    (summary, device) => {
+      switch (device.status) {
         case "healthy":
           summary.healthy += 1;
           break;
@@ -263,11 +321,10 @@ function adminSummary(
           summary.unknown += 1;
           break;
       }
-      if (deviceVersionIsOutdated(user.latestDevice, latestCliRelease.version)) {
+      if (device.isOutdated) {
         summary.outdated += 1;
       }
-      summary.totalDevices += user.deviceCount;
-      summary.totalUsers += 1;
+      summary.totalDevices += 1;
 
       return summary;
     },
@@ -277,10 +334,28 @@ function adminSummary(
       repairNeeded: 0,
       stale: 0,
       totalDevices: 0,
-      totalUsers: 0,
+      totalUsers,
       unknown: 0,
     },
   );
+}
+
+function compareDeviceDebugRows(
+  left: typeof AdminDeviceDebugRow.Type,
+  right: typeof AdminDeviceDebugRow.Type,
+): number {
+  const leftSeen = isoTime(left.latestCheckInAt);
+  const rightSeen = isoTime(right.latestCheckInAt);
+  if (leftSeen !== rightSeen) {
+    return rightSeen - leftSeen;
+  }
+
+  const loginCompare = left.user.login.localeCompare(right.user.login);
+  if (loginCompare !== 0) {
+    return loginCompare;
+  }
+
+  return left.device.name.localeCompare(right.device.name);
 }
 
 function deviceVersionIsOutdated(
@@ -346,11 +421,8 @@ function adminDeviceRepairReason(
   if (device.serviceReloadRequired === true) {
     return "reload-required";
   }
-  return (
-    (device.serviceRepairStatus === "scheduled" || device.serviceRepairStatus === "failure"
-      ? device.serviceRepairReason
-      : null) ?? null
-  );
+
+  return null;
 }
 
 function normalizeVersion(version: string): string {

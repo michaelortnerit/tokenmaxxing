@@ -332,6 +332,23 @@ const AdminLatestDevice = Schema.Struct({
   version: Schema.NullOr(Schema.String),
 });
 
+const AdminDeviceDebugRow = Schema.Struct({
+  activeDays: Schema.Number,
+  activeTokenCount: Schema.Number,
+  device: AdminLatestDevice,
+  isOutdated: Schema.Boolean,
+  lastTokenUsedAt: Schema.NullOr(Schema.String),
+  lastUsageDate: Schema.NullOr(Schema.String),
+  latestCheckInAt: Schema.NullOr(Schema.String),
+  revokedTokenCount: Schema.Number,
+  sources: Schema.Array(Schema.String),
+  status: AdminDeviceStatus,
+  tokenCount: Schema.Number,
+  totalSpendUsd: Schema.Number,
+  totalTokens: Schema.Number,
+  user: AuthUser,
+});
+
 const AdminAccountDebugSummary = Schema.Struct({
   email: Schema.NullOr(Schema.String),
   emailVerified: Schema.Boolean,
@@ -364,6 +381,7 @@ const AdminUserDebugRow = Schema.Struct({
 type AdminUserDebugRow = typeof AdminUserDebugRow.Type;
 
 const AdminUsersResponse = Schema.Struct({
+  devices: Schema.Array(AdminDeviceDebugRow),
   generatedAt: Schema.String,
   latestCliPublishedAt: Schema.NullOr(Schema.String),
   latestCliVersion: Schema.NullOr(Schema.String),
@@ -384,6 +402,7 @@ const AdminUsersResponse = Schema.Struct({
 type AdminUsersResponse = typeof AdminUsersResponse.Type;
 
 export {
+  AdminDeviceDebugRow,
   AdminDeviceStatus,
   AdminUserDebugRow,
   AdminUsersResponse,

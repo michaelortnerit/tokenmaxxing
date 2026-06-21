@@ -53,19 +53,30 @@ function InternalPage() {
         <SummaryCell label="Devices" value={formatInteger(data.summary.totalDevices)} />
       </dl>
       <div className="overflow-x-auto border-b border-border">
-        <table className="w-full table-fixed text-left text-sm">
+        <table className="w-full min-w-[72rem] table-fixed text-left text-sm">
           <thead className="border-b border-border bg-muted/40 text-xs uppercase text-muted-foreground">
             <tr>
-              <th className="w-[30%] p-3 font-medium">User</th>
-              <th className="w-[16%] p-3 font-medium">Version</th>
-              <th className="hidden w-[14%] p-3 font-medium md:table-cell">Arch</th>
-              <th className="w-[16%] p-3 font-medium">Status</th>
-              <th className="w-[24%] p-3 font-medium">Last check-in</th>
+              <th className="w-[20%] p-3 font-medium">Machine</th>
+              <th className="w-[15%] p-3 font-medium">User</th>
+              <th className="w-[13%] p-3 font-medium">Version</th>
+              <th className="hidden w-[8%] p-3 font-medium lg:table-cell">Arch</th>
+              <th className="w-[24%] p-3 font-medium">Status</th>
+              <th className="w-[12%] p-3 font-medium">Last check-in</th>
+              <th className="hidden w-[8%] p-3 font-medium md:table-cell">Last usage</th>
             </tr>
           </thead>
           <tbody>
-            {data.users.map((row) => (
-              <tr className="border-b border-border last:border-b-0" key={row.user.id}>
+            {data.devices.map((row) => (
+              <tr className="border-b border-border last:border-b-0" key={row.device.id}>
+                <td className="p-3 align-top">
+                  <div className="truncate font-medium" title={row.device.name}>
+                    {row.device.name}
+                  </div>
+                  <div className="mt-1 flex min-w-0 items-center gap-2 font-mono text-xs text-muted-foreground">
+                    <span title={row.device.id}>{shortDeviceId(row.device.id)}</span>
+                    <span className="truncate">{row.device.platform}</span>
+                  </div>
+                </td>
                 <td className="p-3 align-top">
                   <Link
                     className="flex items-center gap-2.5 font-medium hover:underline"
@@ -76,23 +87,25 @@ function InternalPage() {
                     {row.user.login}
                   </Link>
                 </td>
-                <td className="p-3 align-top font-medium">
-                  {formatVersion(row.latestDevice?.version ?? null)}
+                <td className="p-3 align-top">
+                  <div className="flex flex-nowrap items-center gap-2">
+                    <span className="font-medium">{formatVersion(row.device.version)}</span>
+                    {row.isOutdated ? <OutdatedPill /> : null}
+                  </div>
                 </td>
-                <td className="hidden p-3 align-top font-mono text-muted-foreground md:table-cell">
-                  {row.latestDevice?.arch ?? "—"}
+                <td className="hidden p-3 align-top font-mono text-muted-foreground lg:table-cell">
+                  {row.device.arch ?? "—"}
                 </td>
                 <td className="p-3 align-top">
-                  <StatusCell
-                    latestVersion={data.latestCliVersion}
-                    row={row}
-                    title={serviceStatusTitle(row)}
-                  />
+                  <StatusCell row={row} title={serviceStatusTitle(row)} />
                 </td>
                 <td className="p-3 align-top">
                   <div title={row.latestCheckInAt ?? undefined}>
                     {formatRelativeTime(row.latestCheckInAt, data.generatedAt)}
                   </div>
+                </td>
+                <td className="hidden p-3 align-top font-mono text-muted-foreground md:table-cell">
+                  {row.lastUsageDate ?? "—"}
                 </td>
               </tr>
             ))}
@@ -139,32 +152,23 @@ function StatusPill({ status, title }: { status: AdminDeviceStatus; title?: stri
   );
 }
 
-function StatusCell({
-  latestVersion,
-  row,
-  title,
-}: {
-  latestVersion: string | null;
-  row: AdminUsersData["users"][number];
-  title?: string | undefined;
-}) {
-  const outdated = isOutdatedVersion(row.latestDevice?.version ?? null, latestVersion);
-  const repairReason = repairReasonForDevice(row.latestDevice);
-  const statusTitle = [title, outdated ? `latest: ${formatVersion(latestVersion)}` : undefined]
-    .filter((part): part is string => part !== undefined && part.length > 0)
-    .join(" · ");
+function OutdatedPill() {
+  return (
+    <span className="inline-flex shrink-0 items-center border border-blue-500/40 bg-blue-500/10 px-2 py-0.5 font-mono text-xs text-blue-600 dark:text-blue-400">
+      outdated
+    </span>
+  );
+}
+
+function StatusCell({ row, title }: { row: AdminUsersData["devices"][number]; title?: string }) {
+  const repairReason = repairReasonForDevice(row.device);
 
   return (
-    <div className="flex flex-nowrap items-center gap-2" title={statusTitle || undefined}>
-      <StatusPill status={row.status} />
+    <div className="flex flex-nowrap items-center gap-2" title={title}>
+      <StatusPill status={row.status} title={title} />
       {row.status === "repair-needed" && repairReason !== null ? (
         <span className="inline-flex shrink-0 items-center border border-red-500/40 bg-red-500/10 px-2 py-0.5 font-mono text-xs text-red-600 dark:text-red-400">
           {repairReasonLabel(repairReason)}
-        </span>
-      ) : null}
-      {outdated ? (
-        <span className="inline-flex shrink-0 items-center border border-blue-500/40 bg-blue-500/10 px-2 py-0.5 font-mono text-xs text-blue-600 dark:text-blue-400">
-          outdated
         </span>
       ) : null}
     </div>
@@ -181,12 +185,8 @@ function fleetSummary(data: AdminUsersData): string {
   ].join(" · ");
 }
 
-function serviceStatusTitle(row: AdminUsersData["users"][number]): string | undefined {
-  const device = row.latestDevice;
-  if (device === null) {
-    return undefined;
-  }
-
+function serviceStatusTitle(row: AdminUsersData["devices"][number]): string | undefined {
+  const device = row.device;
   return [
     device.serviceBackend === null ? undefined : `backend: ${device.serviceBackend}`,
     device.serviceStatus === null ? undefined : `service: ${device.serviceStatus}`,
@@ -220,7 +220,7 @@ function serviceStatusTitle(row: AdminUsersData["users"][number]): string | unde
 }
 
 function repairReasonForDevice(
-  device: AdminUsersData["users"][number]["latestDevice"],
+  device: AdminUsersData["devices"][number]["device"] | null,
 ): ServiceRepairReasonValue | null {
   if (device === null) {
     return null;
@@ -234,12 +234,6 @@ function repairReasonForDevice(
   }
   if (device.serviceReloadRequired === true) {
     return "reload-required";
-  }
-  if (
-    (device.serviceRepairStatus === "scheduled" || device.serviceRepairStatus === "failure") &&
-    device.serviceRepairReason !== null
-  ) {
-    return device.serviceRepairReason;
   }
 
   return null;
@@ -262,16 +256,8 @@ function formatVersion(version: string | null): string {
   return version.startsWith("v") ? version : `v${version}`;
 }
 
-function isOutdatedVersion(version: string | null, latestVersion: string | null): boolean {
-  if (version === null || latestVersion === null) {
-    return false;
-  }
-
-  return normalizeVersion(version) !== normalizeVersion(latestVersion);
-}
-
-function normalizeVersion(version: string): string {
-  return version.trim().replace(/^v/i, "");
+function shortDeviceId(id: string): string {
+  return id.length <= 8 ? id : id.slice(0, 8);
 }
 
 function formatRelativeTime(value: string | null, now: string): string {

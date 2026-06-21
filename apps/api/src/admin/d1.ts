@@ -86,6 +86,7 @@ const makeD1AdminRepository = Effect.fn("makeD1AdminRepository")(function* () {
         const tokenRows = yield* database.use((db) =>
           db
             .select({
+              deviceId: cliTokens.deviceId,
               lastUsedAt: cliTokens.lastUsedAt,
               revokedAt: cliTokens.revokedAt,
               userId: cliTokens.userId,
@@ -113,12 +114,37 @@ const makeD1AdminRepository = Effect.fn("makeD1AdminRepository")(function* () {
             .from(usageDays)
             .orderBy(asc(usageDays.source)),
         );
+        const deviceUsageRows = yield* database.use((db) =>
+          db
+            .select({
+              activeDays: sql<number>`count(distinct ${usageDays.date})`,
+              deviceId: usageDays.deviceId,
+              lastUsageDate: sql<string | null>`max(${usageDays.date})`,
+              totalSpendUsd: sql<number | null>`sum(${usageDays.costUsd})`,
+              totalTokens: sql<number | null>`sum(${usageDays.totalTokens})`,
+              userId: usageDays.userId,
+            })
+            .from(usageDays)
+            .groupBy(usageDays.userId, usageDays.deviceId),
+        );
+        const deviceSourceRows = yield* database.use((db) =>
+          db
+            .selectDistinct({
+              deviceId: usageDays.deviceId,
+              source: usageDays.source,
+              userId: usageDays.userId,
+            })
+            .from(usageDays)
+            .orderBy(asc(usageDays.source)),
+        );
 
         const accountsByUser = groupBy(accountRows, (row) => row.userId);
         const devicesByUser = groupBy(deviceRows, (row) => row.userId);
         const tokensByUser = groupBy(tokenRows, (row) => row.userId);
         const usageByUser = new Map(usageRows.map((row) => [row.userId, row]));
         const sourcesByUser = groupBy(sourceRows, (row) => row.userId);
+        const deviceUsageByUser = groupBy(deviceUsageRows, (row) => row.userId);
+        const sourcesByDevice = groupBy(deviceSourceRows, (row) => row.deviceId);
 
         return userRows.map((user): AdminUserSnapshot => {
           const usage = usageByUser.get(user.id);
@@ -154,8 +180,17 @@ const makeD1AdminRepository = Effect.fn("makeD1AdminRepository")(function* () {
               serviceTemplateVersion: device.serviceTemplateVersion,
               version: device.version,
             })),
+            deviceUsage: (deviceUsageByUser.get(user.id) ?? []).map((row) => ({
+              activeDays: row.activeDays,
+              deviceId: row.deviceId,
+              lastUsageDate: row.lastUsageDate ?? null,
+              sources: (sourcesByDevice.get(row.deviceId) ?? []).map((source) => source.source),
+              totalSpendUsd: row.totalSpendUsd ?? 0,
+              totalTokens: row.totalTokens ?? 0,
+            })),
             sources: (sourcesByUser.get(user.id) ?? []).map((row) => row.source).sort(),
             tokens: (tokensByUser.get(user.id) ?? []).map((token) => ({
+              deviceId: token.deviceId,
               lastUsedAt: token.lastUsedAt?.toISOString() ?? null,
               revokedAt: token.revokedAt?.toISOString() ?? null,
             })),
