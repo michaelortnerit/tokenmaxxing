@@ -73,7 +73,10 @@ function InternalPage() {
                   </Link>
                 </td>
                 <td className="p-3 align-top font-medium">
-                  {formatVersion(row.latestDevice?.version ?? null)}
+                  <VersionCell
+                    latestVersion={data.latestCliVersion}
+                    version={row.latestDevice?.version ?? null}
+                  />
                 </td>
                 <td className="hidden p-3 align-top font-mono text-muted-foreground md:table-cell">
                   {row.latestDevice?.arch ?? "—"}
@@ -132,6 +135,30 @@ function StatusPill({ status, title }: { status: AdminDeviceStatus; title?: stri
   );
 }
 
+function VersionCell({
+  latestVersion,
+  version,
+}: {
+  latestVersion: string | null;
+  version: string | null;
+}) {
+  const outdated = isOutdatedVersion(version, latestVersion);
+
+  return (
+    <div
+      className="flex flex-wrap items-center gap-2"
+      title={outdated ? `latest: ${formatVersion(latestVersion)}` : undefined}
+    >
+      <span>{formatVersion(version)}</span>
+      {outdated ? (
+        <span className="inline-flex items-center border border-blue-500/40 bg-blue-500/10 px-1.5 py-0.5 font-mono text-[10px] leading-none text-blue-600 dark:text-blue-400">
+          outdated
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function fleetSummary(data: AdminUsersData): string {
   return [
     `User fleet`,
@@ -170,6 +197,18 @@ function formatVersion(version: string | null): string {
   }
 
   return version.startsWith("v") ? version : `v${version}`;
+}
+
+function isOutdatedVersion(version: string | null, latestVersion: string | null): boolean {
+  if (version === null || latestVersion === null) {
+    return false;
+  }
+
+  return normalizeVersion(version) !== normalizeVersion(latestVersion);
+}
+
+function normalizeVersion(version: string): string {
+  return version.trim().replace(/^v/i, "");
 }
 
 function formatRelativeTime(value: string | null, now: string): string {
