@@ -68,7 +68,9 @@ const makeTokensService = Effect.fn("makeTokensService")(function* () {
       return yield* repository.listDevices(userId).pipe(Effect.orDie);
     }),
     listTokens: Effect.fn("TokensService.listTokens")(function* (userId) {
-      return yield* repository.listTokens(userId).pipe(Effect.orDie);
+      const tokens = yield* repository.listTokens(userId).pipe(Effect.orDie);
+
+      return tokens.filter((token) => token.revokedAt === null);
     }),
     deleteDevice: Effect.fn("TokensService.deleteDevice")(function* (userId, deviceId) {
       const deleted = yield* repository

@@ -200,7 +200,7 @@ function TokensSection() {
       ) : null}
       <div className="-mx-4 mt-4 overflow-hidden border-y border-border">
         {data.tokens.length === 0 ? (
-          <p className="p-4 text-sm text-muted-foreground">No CLI tokens yet.</p>
+          <p className="p-4 text-sm text-muted-foreground">No active CLI tokens.</p>
         ) : (
           <table className="w-full text-sm">
             <tbody>
@@ -213,17 +213,13 @@ function TokensSection() {
                       : `used ${new Date(token.lastUsedAt).toLocaleString()}`}
                   </td>
                   <td className="p-3 text-right">
-                    {token.revokedAt !== null ? (
-                      <span className="text-muted-foreground">revoked</span>
-                    ) : (
-                      <Button
-                        disabled={revoke.isPending}
-                        onClick={() => revoke.mutate(token.id)}
-                        variant="destructive"
-                      >
-                        Revoke
-                      </Button>
-                    )}
+                    <Button
+                      disabled={revoke.isPending}
+                      onClick={() => revoke.mutate(token.id)}
+                      variant="destructive"
+                    >
+                      Revoke
+                    </Button>
                   </td>
                 </tr>
               ))}

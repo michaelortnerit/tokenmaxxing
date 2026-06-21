@@ -70,7 +70,7 @@ const makeD1TokensRepository = Effect.fn("makeD1TokensRepository")(function* () 
           db
             .select()
             .from(cliTokens)
-            .where(eq(cliTokens.userId, userId))
+            .where(and(eq(cliTokens.userId, userId), isNull(cliTokens.revokedAt)))
             .orderBy(desc(cliTokens.createdAt)),
         );
 
