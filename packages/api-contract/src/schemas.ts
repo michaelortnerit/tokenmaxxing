@@ -284,10 +284,10 @@ const OkResponse = Schema.Struct({
 
 const AdminDeviceStatus = Schema.Literals([
   "latest",
+  "outdated",
   "repair-needed",
   "stale",
   "unknown",
-  "updating",
 ]);
 
 type AdminDeviceStatus = typeof AdminDeviceStatus.Type;
@@ -348,11 +348,11 @@ const AdminUsersResponse = Schema.Struct({
   staleThresholdHours: Schema.Number,
   summary: Schema.Struct({
     latest: Schema.Number,
+    outdated: Schema.Number,
     repairNeeded: Schema.Number,
     stale: Schema.Number,
     totalDevices: Schema.Number,
     totalUsers: Schema.Number,
-    updating: Schema.Number,
     unknown: Schema.Number,
   }),
   users: Schema.Array(AdminUserDebugRow),

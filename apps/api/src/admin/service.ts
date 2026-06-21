@@ -241,10 +241,10 @@ function adminDeviceStatus(
     const publishedAt =
       latestCliRelease.publishedAt === null ? Number.NaN : Date.parse(latestCliRelease.publishedAt);
     if (!Number.isFinite(publishedAt)) {
-      return elapsedMs <= ROLLOUT_GRACE_MS ? "updating" : "stale";
+      return elapsedMs <= ROLLOUT_GRACE_MS ? "outdated" : "stale";
     }
 
-    return now.getTime() - publishedAt <= ROLLOUT_GRACE_MS ? "updating" : "stale";
+    return now.getTime() - publishedAt <= ROLLOUT_GRACE_MS ? "outdated" : "stale";
   }
 
   return "latest";
@@ -257,6 +257,9 @@ function adminSummary(users: readonly (typeof AdminUserDebugRow.Type)[]) {
         case "latest":
           summary.latest += 1;
           break;
+        case "outdated":
+          summary.outdated += 1;
+          break;
         case "repair-needed":
           summary.repairNeeded += 1;
           break;
@@ -266,9 +269,6 @@ function adminSummary(users: readonly (typeof AdminUserDebugRow.Type)[]) {
         case "unknown":
           summary.unknown += 1;
           break;
-        case "updating":
-          summary.updating += 1;
-          break;
       }
       summary.totalDevices += user.deviceCount;
       summary.totalUsers += 1;
@@ -277,11 +277,11 @@ function adminSummary(users: readonly (typeof AdminUserDebugRow.Type)[]) {
     },
     {
       latest: 0,
+      outdated: 0,
       repairNeeded: 0,
       stale: 0,
       totalDevices: 0,
       totalUsers: 0,
-      updating: 0,
       unknown: 0,
     },
   );

@@ -115,11 +115,11 @@ describe("AdminService.listUsers", () => {
 
     expect(response.summary).toEqual({
       latest: 1,
+      outdated: 0,
       repairNeeded: 0,
       stale: 0,
       totalDevices: 1,
       totalUsers: 1,
-      updating: 0,
       unknown: 0,
     });
     expect(response.latestCliPublishedAt).toBe("2026-06-19T19:00:00.000Z");
@@ -144,7 +144,7 @@ describe("AdminService.listUsers", () => {
 });
 
 describe("adminDeviceStatus", () => {
-  it("classifies latest, updating, stale, and unknown devices", () => {
+  it("classifies latest, outdated, stale, and unknown devices", () => {
     expect(adminDeviceStatus(device(), latestRelease, now)).toBe("latest");
     expect(
       adminDeviceStatus(
@@ -164,7 +164,7 @@ describe("adminDeviceStatus", () => {
         now,
       ),
     ).toBe("repair-needed");
-    expect(adminDeviceStatus(device({ version: "0.5.3" }), latestRelease, now)).toBe("updating");
+    expect(adminDeviceStatus(device({ version: "0.5.3" }), latestRelease, now)).toBe("outdated");
     expect(
       adminDeviceStatus(
         device({ version: "0.5.3" }),

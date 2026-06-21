@@ -116,8 +116,8 @@ function SummaryCell({ label, value }: { label: string; value: string }) {
 function StatusPill({ status, title }: { status: AdminDeviceStatus; title?: string }) {
   const className = {
     latest: "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+    outdated: "border-blue-500/40 bg-blue-500/10 text-blue-600 dark:text-blue-400",
     "repair-needed": "border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400",
-    updating: "border-blue-500/40 bg-blue-500/10 text-blue-600 dark:text-blue-400",
     stale: "border-accent/50 bg-accent/10 text-accent",
     unknown: "border-border bg-muted text-muted-foreground",
   }[status];
@@ -136,8 +136,8 @@ function fleetSummary(data: AdminUsersData): string {
   return [
     `User fleet`,
     `${formatInteger(data.summary.latest)} on latest`,
+    `${formatInteger(data.summary.outdated)} outdated`,
     `${formatInteger(data.summary.repairNeeded)} repair needed`,
-    `${formatInteger(data.summary.updating)} updating`,
     `${formatInteger(data.summary.stale)} stale`,
     `${formatInteger(data.summary.unknown)} unknown`,
   ].join(" · ");
