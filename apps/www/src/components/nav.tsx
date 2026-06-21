@@ -59,7 +59,7 @@ function UserMenu() {
   if (me.isError) {
     return (
       <Link className={buttonClassName({ variant: "primary", size: "sm" })} to="/login">
-        Sign in
+        Log in
       </Link>
     );
   }

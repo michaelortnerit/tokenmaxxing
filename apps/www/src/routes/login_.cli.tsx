@@ -51,7 +51,7 @@ function CliLoginPage() {
         ) : me.isError ? (
           <>
             <p className="mt-2 text-sm text-muted-foreground">
-              Sign in to approve code <Code>{code}</Code>.
+              Log in to approve code <Code>{code}</Code>.
             </p>
             <OAuthProviderButtons
               className="mt-6"
@@ -66,7 +66,7 @@ function CliLoginPage() {
               Approved <span className="font-medium">{approve.data.deviceName}</span>.
             </p>
             <p className="mt-2 text-sm text-muted-foreground">
-              Head back to your terminal — the CLI is signing in now.
+              Head back to your terminal — the CLI is logging in now.
             </p>
           </>
         ) : (
