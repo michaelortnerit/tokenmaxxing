@@ -5,14 +5,21 @@ All notable changes to tokenmaxxing are documented here. Versions are anchored t
 
 ## Unreleased
 
+## 0.4.13 - 2026-06-21
+
 ### Added
 
+- Added `tokenmaxxing service repair` to refresh service files and re-register native schedulers.
+- Added automatic sync service check-ins for scheduler health and repair-needed fleet status.
 - Added a homepage bootstrap hero with a copyable install-and-bootstrap command.
 - Added `/terms` and `/privacy` pages.
 - Added avatars to the internal admin fleet page.
 
 ### Changed
 
+- Changed automatic sync to run every 5 minutes.
+- Deferred native scheduler repair after scheduled auto-updates so the active job is not reloaded by itself.
+- Made service install prefer durable command paths for transient FNM multishell shims.
 - Refactored web route data loading to TanStack Query suspense with SSR preloading.
 - Made the API client forward auth cookies during SSR.
 - Simplified the custom web server setup and removed unused route exports/tests.
@@ -20,7 +27,7 @@ All notable changes to tokenmaxxing are documented here. Versions are anchored t
 - Hid revoked CLI tokens from the settings API response and settings UI.
 - Updated internal/admin and profile page spacing, table, and surface styling.
 - Defaulted the leaderboard to 30 days and stripped default search params from URLs.
-- Improved daemon sync observability, check-in display, sync cadence, and log rotation.
+- Improved automatic sync observability, check-in display, and log rotation.
 - Added shared `cn` support with `clsx` and `tailwind-merge`.
 
 ## 0.4.12 - 2026-06-19
