@@ -4,6 +4,7 @@ type Profile = typeof ProfileResponse.Type;
 
 const SITE_ORIGIN = "https://tokenmaxxing.sh";
 const OG_IMAGE_HEIGHT = 630;
+const OG_IMAGE_STYLE_VERSION = 2;
 const OG_IMAGE_WIDTH = 1200;
 
 function profileOgTitle(profile: Profile): string {
@@ -27,6 +28,7 @@ function profileOgVersion(profile: Profile): string {
     Math.round(profile.stats.totalSpendUsd * 100),
     Math.round(profile.stats.totalTokens),
     profile.stats.activeDays,
+    `s${OG_IMAGE_STYLE_VERSION}`,
   ].join("-");
 }
 
@@ -79,6 +81,7 @@ export {
   formatOgTokens,
   formatOgUsd,
   OG_IMAGE_HEIGHT,
+  OG_IMAGE_STYLE_VERSION,
   OG_IMAGE_WIDTH,
   profileOgDescription,
   profileOgImagePath,

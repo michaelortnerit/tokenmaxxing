@@ -1,4 +1,5 @@
 @import "@fontsource/geist-sans";
+@import "@fontsource/geist-sans/600.css";
 @import "@fontsource/geist-sans/700.css";
 @import "@fontsource/geist-mono";
 @import "tailwindcss";
@@ -41,7 +42,7 @@
   --color-border: var(--border);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
-  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Geist Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
