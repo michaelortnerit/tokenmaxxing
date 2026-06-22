@@ -1,6 +1,6 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
 
-import { modelFamily } from "../../components/charts/scale";
+import { modelSeriesLabel } from "../../components/charts/scale";
 import { formatOgNumber, formatOgTokens, formatOgUsd } from "../../lib/og";
 import { loadProfileOgData, type ProfileOgData } from "../../lib/og-data";
 
@@ -72,14 +72,14 @@ function OgProfileHeader({ data }: { data: ProfileOgData }) {
 
 function StatsGrid({ data }: { data: ProfileOgData }) {
   const { stats } = data.profile;
-  const topModel = stats.topModel === null ? "—" : modelFamily(stats.topModel.model);
+  const topSpendModel = stats.topModel === null ? "—" : modelSeriesLabel(stats.topModel.model);
   const metrics = [
     { label: "Total spend", value: formatOgUsd(stats.totalSpendUsd) },
     { label: "Total tokens", value: formatOgTokens(stats.totalTokens) },
     { label: "Active days", value: formatOgNumber(stats.activeDays) },
     { label: "Current streak", value: formatOgNumber(stats.currentStreakDays) },
     { label: "Sessions", value: formatOgNumber(stats.sessionCount) },
-    { label: "Top model", value: topModel },
+    { label: "Top spend model", value: topSpendModel },
   ];
 
   return (

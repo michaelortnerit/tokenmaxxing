@@ -22,6 +22,7 @@ describe("profile OG card", () => {
     expect(stats).toContain('id="og-card"');
     expect(stats).toContain("pondorasti");
     expect(stats).toContain("Total spend");
+    expect(stats).toContain("Top spend model");
   });
 });
 

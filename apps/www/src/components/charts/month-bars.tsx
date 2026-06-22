@@ -18,7 +18,7 @@ import { anchorLeft, ChartTooltip } from "./tooltip";
 interface MonthPoint {
   /** YYYY-MM */
   month: string;
-  segments: { color: string; family: string; value: number }[];
+  segments: { color: string; series: string; value: number }[];
   value: number;
 }
 
@@ -77,7 +77,7 @@ function MonthBars({ months }: { months: MonthPoint[] }) {
                       <rect
                         fill={segment.color}
                         height={Math.max(height, 0)}
-                        key={segment.family}
+                        key={segment.series}
                         opacity={hovered === null || hovered === index ? 1 : 0.45}
                         width={barWidth}
                         x={x}
@@ -118,7 +118,7 @@ function MonthBars({ months }: { months: MonthPoint[] }) {
             .sort((a, b) => b.value - a.value)
             .map((segment) => ({
               color: segment.color,
-              label: segment.family,
+              label: segment.series,
               value: formatUsd(segment.value),
             }))}
           style={{ left: activeTooltip.left, top: `${activeTooltip.top}px` }}

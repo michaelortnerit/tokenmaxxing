@@ -3,7 +3,7 @@ import type { ProfileDailyRow } from "@tokenmaxxing/api-contract";
 type DailyRow = typeof ProfileDailyRow.Type;
 
 /**
- * Shared chart math: linear scales, model-family bucketing, and number
+ * Shared chart math: linear scales, model-series bucketing, and number
  * formatting. Charts are pure SVG; everything here is deterministic and
  * unit-testable.
  */
@@ -45,12 +45,23 @@ function niceMax(value: number): number {
   return niceFraction * 10 ** exponent;
 }
 
-const MODEL_FAMILY_RULES: readonly [RegExp, string][] = [
-  [/^claude-fable/i, "Claude Fable"],
-  [/^claude-mythos/i, "Claude Mythos"],
-  [/^claude-opus/i, "Claude Opus"],
-  [/^claude-sonnet/i, "Claude Sonnet"],
-  [/^claude-haiku/i, "Claude Haiku"],
+const CLAUDE_MODEL_LINES = {
+  fable: "Claude Fable",
+  haiku: "Claude Haiku",
+  mythos: "Claude Mythos",
+  opus: "Claude Opus",
+  sonnet: "Claude Sonnet",
+} as const;
+
+const CLAUDE_SERIES_ORDER = [
+  "Claude Fable",
+  "Claude Mythos",
+  "Claude Opus",
+  "Claude Sonnet",
+  "Claude Haiku",
+] as const;
+
+const MODEL_SERIES_RULES: readonly [RegExp, string][] = [
   [/^gpt-5\.5/i, "GPT-5.5"],
   [/^gpt-5\.4/i, "GPT-5.4"],
   [/^gpt-5/i, "GPT-5"],
@@ -60,33 +71,57 @@ const MODEL_FAMILY_RULES: readonly [RegExp, string][] = [
   [/^o[0-9]/i, "OpenAI o-series"],
 ];
 
-const MODEL_FAMILY_ORDER = [
+const MODEL_SERIES_ORDER = [
   "GPT-5.5",
   "GPT-5.4",
   "GPT-5",
   "GPT",
   "GPT Codex",
   "OpenAI o-series",
-  "Claude Fable",
-  "Claude Mythos",
-  "Claude Opus",
-  "Claude Sonnet",
-  "Claude Haiku",
+  ...CLAUDE_SERIES_ORDER,
   "Gemini",
+  "Other",
 ] as const;
 
-function modelFamily(model: string): string {
-  for (const [pattern, family] of MODEL_FAMILY_RULES) {
+function modelSeriesLabel(model: string): string {
+  const claude = claudeSeriesLabel(model);
+  if (claude !== null) {
+    return claude;
+  }
+
+  for (const [pattern, series] of MODEL_SERIES_RULES) {
     if (pattern.test(model)) {
-      return family;
+      return series;
     }
   }
 
   return "Other";
 }
 
+function claudeSeriesLabel(model: string): string | null {
+  const match = /^claude-([a-z]+)(?:-(\d+)(?:-(\d+))?)?/i.exec(model);
+  if (match === null) {
+    return null;
+  }
+
+  const line = match[1]?.toLowerCase();
+  const base =
+    line === undefined ? undefined : CLAUDE_MODEL_LINES[line as keyof typeof CLAUDE_MODEL_LINES];
+  if (base === undefined) {
+    return "Other";
+  }
+
+  const major = match[2];
+  if (major === undefined) {
+    return base;
+  }
+
+  const minor = match[3];
+  return minor === undefined ? `${base} ${major}` : `${base} ${major}.${minor}`;
+}
+
 /** Fixed palette tuned to read on both themes. */
-const MODEL_FAMILY_COLORS = {
+const MODEL_SERIES_COLORS = {
   "Claude Fable": "#38bdf8",
   "Claude Haiku": "#ec4899",
   "Claude Mythos": "#a855f7",
@@ -102,24 +137,88 @@ const MODEL_FAMILY_COLORS = {
   Other: "#9ca3af",
 } as const satisfies Record<string, string>;
 
-/** Stable family -> color assignment in canonical model-family order. */
-function familyColors(rows: readonly DailyRow[]): Map<string, string> {
+const DYNAMIC_SERIES_COLORS = [
+  "#f59e0b",
+  "#2563eb",
+  "#dc2626",
+  "#16a34a",
+  "#9333ea",
+  "#0891b2",
+  "#ea580c",
+  "#db2777",
+  "#65a30d",
+  "#7c3aed",
+  "#0d9488",
+  "#475569",
+] as const;
+
+/** Stable series -> color assignment in canonical model-series order. */
+function seriesColors(rows: readonly DailyRow[]): Map<string, string> {
   const seen = new Set<string>();
   for (const row of rows) {
-    seen.add(modelFamily(row.key));
+    seen.add(modelSeriesLabel(row.key));
   }
 
   const colors = new Map<string, string>();
-  for (const family of MODEL_FAMILY_ORDER) {
-    if (seen.has(family)) {
-      colors.set(family, MODEL_FAMILY_COLORS[family]);
+  let dynamicIndex = 0;
+  for (const series of [...seen].sort(compareModelSeriesLabels)) {
+    const staticColor = MODEL_SERIES_COLORS[series as keyof typeof MODEL_SERIES_COLORS];
+    if (staticColor !== undefined) {
+      colors.set(series, staticColor);
+    } else {
+      colors.set(
+        series,
+        DYNAMIC_SERIES_COLORS[dynamicIndex % DYNAMIC_SERIES_COLORS.length] ??
+          MODEL_SERIES_COLORS.Other,
+      );
+      dynamicIndex += 1;
     }
-  }
-  if (seen.has("Other")) {
-    colors.set("Other", MODEL_FAMILY_COLORS.Other);
   }
 
   return colors;
+}
+
+function compareModelSeriesLabels(a: string, b: string): number {
+  const left = modelSeriesSortKey(a);
+  const right = modelSeriesSortKey(b);
+
+  return (
+    left.group - right.group ||
+    left.version - right.version ||
+    left.label.localeCompare(right.label)
+  );
+}
+
+function modelSeriesSortKey(label: string) {
+  for (const [group, base] of MODEL_SERIES_ORDER.entries()) {
+    if (label === base) {
+      return { group, label, version: Number.MAX_SAFE_INTEGER };
+    }
+    if (CLAUDE_SERIES_ORDER.includes(base as (typeof CLAUDE_SERIES_ORDER)[number])) {
+      const version = claudeLabelVersion(label, base);
+      if (version !== null) {
+        return { group, label, version: -version };
+      }
+    }
+  }
+
+  return { group: MODEL_SERIES_ORDER.length, label, version: 0 };
+}
+
+function claudeLabelVersion(label: string, base: string): number | null {
+  const version = new RegExp(`^${escapeRegExp(base)} (\\d+)(?:\\.(\\d+))?$`).exec(label);
+  if (version === null) {
+    return null;
+  }
+
+  const major = Number(version[1]);
+  const minor = version[2] === undefined ? 0 : Number(version[2]);
+
+  return major * 1_000 + minor;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 const usd0 = new Intl.NumberFormat("en-US", {
@@ -203,13 +302,13 @@ export {
   CHART_TICKS,
   CHART_WIDTH,
   enumerateDays,
-  familyColors,
   formatDay,
   formatMonth,
   formatMonthLong,
   formatTokens,
   formatUsd,
   linearScale,
-  modelFamily,
+  modelSeriesLabel,
   niceMax,
+  seriesColors,
 };

@@ -13,7 +13,7 @@ interface HeatmapProps {
   byDate: Map<string, number>;
   first: string;
   last: string;
-  segmentsByDate: Map<string, { color: string; family: string; value: number }[]>;
+  segmentsByDate: Map<string, { color: string; series: string; value: number }[]>;
 }
 
 interface HoveredCell {
@@ -158,7 +158,7 @@ function Heatmap({ byDate, first, last, segmentsByDate }: HeatmapProps) {
             .sort((a, b) => b.value - a.value)
             .map((segment) => ({
               color: segment.color,
-              label: segment.family,
+              label: segment.series,
               value: formatUsd(segment.value),
             }))}
           style={{ left: `${hovered.left}px`, top: `${hovered.top - 4}px` }}

@@ -5,14 +5,14 @@ import { barLayout, CHART_AXIS, CHART_WIDTH, formatDay, linearScale, niceMax } f
 import { anchorBesideBar, ChartTooltip } from "./tooltip";
 
 /**
- * Daily metric, one bar per day stacked by model family. Hover reveals the
- * per-family breakdown.
+ * Daily metric, one bar per day stacked by model series. Hover reveals the
+ * per-series breakdown.
  */
 
 interface StackedDay {
   date: string;
-  /** family -> metric value, families pre-sorted by overall rank. */
-  segments: { color: string; family: string; value: number }[];
+  /** series -> metric value, series pre-sorted by overall rank. */
+  segments: { color: string; series: string; value: number }[];
   total: number;
 }
 
@@ -87,14 +87,14 @@ function StackedBars({
               {day.segments.map((segment) => {
                 const height = y(segment.value);
                 cursor -= height;
-                const dimmedByFamily = highlight !== null && segment.family !== highlight;
+                const dimmedBySeries = highlight !== null && segment.series !== highlight;
                 const dimmedByDay = hovered !== null && hovered !== index;
                 return (
                   <rect
                     fill={segment.color}
                     height={Math.max(height, 0)}
-                    key={segment.family}
-                    opacity={dimmedByFamily ? 0.12 : dimmedByDay ? 0.45 : 1}
+                    key={segment.series}
+                    opacity={dimmedBySeries ? 0.12 : dimmedByDay ? 0.45 : 1}
                     width={barWidth}
                     x={x}
                     y={cursor}
@@ -127,7 +127,7 @@ function StackedBars({
             .sort((a, b) => b.value - a.value)
             .map((segment) => ({
               color: segment.color,
-              label: segment.family,
+              label: segment.series,
               value: valueFormatter(segment.value),
             }))}
           style={{ left: anchorBesideBar(activePosition.center, activePosition.edge), top: "50%" }}
@@ -141,18 +141,18 @@ function StackedBars({
 
 interface LegendEntry {
   color: string;
-  family: string;
+  series: string;
   /** Share of charted metric, 0–100. */
   percent: number;
 }
 
-/** Ranked, vertical legend that sits beside the chart: rank · dot · family · share. */
+/** Ranked, vertical legend that sits beside the chart: rank · dot · series · share. */
 function Legend({
   entries,
   onHover,
 }: {
   entries: LegendEntry[];
-  onHover?: (family: string | null) => void;
+  onHover?: (series: string | null) => void;
 }) {
   return (
     <ol
@@ -162,14 +162,14 @@ function Legend({
       {entries.map((entry, index) => (
         <li
           className="flex items-center gap-3 rounded px-2 py-1 text-sm hover:bg-muted"
-          key={entry.family}
-          onPointerEnter={() => onHover?.(entry.family)}
+          key={entry.series}
+          onPointerEnter={() => onHover?.(entry.series)}
         >
           <span className="w-5 shrink-0 text-right tabular-nums text-muted-foreground">
             {index + 1}
           </span>
           <span className="size-2.5 shrink-0 rounded-full" style={{ background: entry.color }} />
-          <span className="flex-1 truncate">{entry.family}</span>
+          <span className="flex-1 truncate">{entry.series}</span>
           <span className="tabular-nums text-muted-foreground">{entry.percent.toFixed(1)}%</span>
         </li>
       ))}

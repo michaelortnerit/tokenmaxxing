@@ -77,4 +77,51 @@ describe("deriveCharts", () => {
       "2026-06",
     ]);
   });
+
+  it("keeps versioned Opus models as separate series", () => {
+    const range: DailyRange = {
+      first: "2026-06-21",
+      last: "2026-06-21",
+    };
+    const rows: DailyRow[] = [
+      dailyRow({ costUsd: 20, key: "claude-opus-4-8", totalTokens: 200 }),
+      dailyRow({ costUsd: 10, key: "claude-opus-4-7", totalTokens: 100 }),
+    ];
+
+    const derived = deriveCharts(rows, range);
+
+    expect(derived.spendLegend.map((entry) => entry.series)).toEqual([
+      "Claude Opus 4.8",
+      "Claude Opus 4.7",
+    ]);
+    expect(
+      derived.spendDays[0]?.segments
+        .filter((segment) => segment.value > 0)
+        .map((segment) => [segment.series, segment.value]),
+    ).toEqual([
+      ["Claude Opus 4.8", 20],
+      ["Claude Opus 4.7", 10],
+    ]);
+  });
 });
+
+function dailyRow({
+  costUsd,
+  key,
+  totalTokens,
+}: {
+  costUsd: number;
+  key: string;
+  totalTokens: number;
+}): DailyRow {
+  return {
+    cacheCreationTokens: 0,
+    cacheReadTokens: 0,
+    costUsd,
+    date: "2026-06-21",
+    inputTokens: 0,
+    key,
+    outputTokens: 0,
+    totalTokens,
+  };
+}

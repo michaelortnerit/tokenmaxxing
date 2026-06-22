@@ -4,7 +4,7 @@ type Profile = typeof ProfileResponse.Type;
 
 const SITE_ORIGIN = "https://tokenmaxxing.sh";
 const OG_IMAGE_HEIGHT = 630;
-const OG_IMAGE_STYLE_VERSION = 2;
+const OG_IMAGE_STYLE_VERSION = 3;
 const OG_IMAGE_WIDTH = 1200;
 
 function profileOgTitle(profile: Profile): string {
