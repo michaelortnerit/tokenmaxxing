@@ -7,6 +7,7 @@ import type {
 } from "@tokenmaxxing/api-contract";
 
 import { Avatar } from "../components/ui/avatar";
+import { Badge } from "../components/ui/badge";
 import { isApiError } from "../lib/api";
 import { adminUsersQueryOptions } from "../lib/queries";
 
@@ -132,39 +133,25 @@ function SummaryCell({ label, value }: { label: string; value: string }) {
 }
 
 function StatusPill({ status, title }: { status: AdminDeviceStatus; title?: string }) {
-  const className = {
-    healthy: "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-    "repair-needed": "border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400",
-    stale: "border-accent/50 bg-accent/10 text-accent",
-    unknown: "border-border bg-muted text-muted-foreground",
-  }[status];
-
   return (
-    <span
-      className={`inline-flex shrink-0 items-center border px-2 py-0.5 font-mono text-xs ${className}`}
-      title={title}
-    >
+    <Badge title={title} variant={status}>
       {status}
-    </span>
+    </Badge>
   );
 }
 
 function OutdatedPill() {
-  return (
-    <span className="inline-flex shrink-0 items-center whitespace-nowrap border border-blue-500/40 bg-blue-500/10 px-2 py-0.5 font-mono text-xs text-blue-600 dark:text-blue-400">
-      outdated
-    </span>
-  );
+  return <Badge variant="outdated">outdated</Badge>;
 }
 
 function UpdateBlockedPill({ reason }: { reason: string | null }) {
   return (
-    <span
-      className="inline-flex shrink-0 items-center whitespace-nowrap border border-amber-500/50 bg-amber-500/10 px-2 py-0.5 font-mono text-xs text-amber-700 dark:text-amber-300"
+    <Badge
       title={reason === null ? undefined : updateBlockedReasonLabel(reason)}
+      variant="update-blocked"
     >
       update blocked
-    </span>
+    </Badge>
   );
 }
 
@@ -188,9 +175,7 @@ function StatusCell({ row, title }: { row: AdminUsersData["devices"][number]; ti
     <div className="flex flex-nowrap items-center gap-2" title={title}>
       <StatusPill status={row.status} title={title} />
       {row.status === "repair-needed" && repairReason !== null ? (
-        <span className="inline-flex shrink-0 items-center border border-red-500/40 bg-red-500/10 px-2 py-0.5 font-mono text-xs text-red-600 dark:text-red-400">
-          {repairReasonLabel(repairReason)}
-        </span>
+        <Badge variant="repair-needed">{repairReasonLabel(repairReason)}</Badge>
       ) : null}
     </div>
   );

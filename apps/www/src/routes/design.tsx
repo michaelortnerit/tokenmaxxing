@@ -4,7 +4,7 @@ import { Copy, PencilSimple, Trash } from "@phosphor-icons/react/ssr";
 
 import { StatCard } from "../components/stat-card";
 import { Avatar } from "../components/ui/avatar";
-import { Badge } from "../components/ui/badge";
+import { Badge, type BadgeVariant } from "../components/ui/badge";
 import { Button, buttonClassName } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Code } from "../components/ui/code";
@@ -45,11 +45,22 @@ const DEMO_TABS = [
   { label: "Active days", value: "days" as const },
 ];
 
+const BADGE_VARIANTS: { label: string; variant: BadgeVariant }[] = [
+  { label: "muted", variant: "muted" },
+  { label: "accent", variant: "accent" },
+  { label: "healthy", variant: "healthy" },
+  { label: "stale", variant: "stale" },
+  { label: "unknown", variant: "unknown" },
+  { label: "repair-needed", variant: "repair-needed" },
+  { label: "outdated", variant: "outdated" },
+  { label: "update blocked", variant: "update-blocked" },
+];
+
 function DesignPage() {
   const [tab, setTab] = useState<(typeof DEMO_TABS)[number]["value"]>("spend");
 
   return (
-    <div className="flex flex-col gap-12">
+    <div className="flex flex-col gap-12 px-4 py-8">
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Design system</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -155,8 +166,11 @@ function DesignPage() {
 
       <Section title="Badge">
         <div className="flex flex-wrap items-center gap-3">
-          <Badge variant="muted">muted</Badge>
-          <Badge variant="accent">accent</Badge>
+          {BADGE_VARIANTS.map((badge) => (
+            <Badge key={badge.variant} variant={badge.variant}>
+              {badge.label}
+            </Badge>
+          ))}
         </div>
       </Section>
 
