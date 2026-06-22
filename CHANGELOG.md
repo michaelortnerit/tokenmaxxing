@@ -5,6 +5,12 @@ All notable changes to tokenmaxxing are documented here. Versions are anchored t
 
 ## Unreleased
 
+## 0.4.18-alpha.1 - 2026-06-22
+
+### Changed
+
+- Reissued the alpha service-runner release through GitHub Actions trusted publishing after bootstrapping the generated runner packages.
+
 ## 0.4.18-alpha.0 - 2026-06-22
 
 ### Added
