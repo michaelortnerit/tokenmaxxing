@@ -2,7 +2,7 @@ import type { ButtonHTMLAttributes } from "react";
 
 import { cn } from "../../lib/cn";
 
-type ButtonVariant = "primary" | "ghost" | "destructive";
+type ButtonVariant = "primary" | "outline" | "ghost" | "destructive";
 type ButtonSize = "sm" | "md" | "icon";
 
 interface ButtonStyleProps {
@@ -15,6 +15,8 @@ interface ButtonStyleProps {
 const VARIANTS: Record<ButtonVariant, string> = {
   primary:
     "font-medium bg-foreground text-background transition-opacity hover:opacity-85 disabled:opacity-50",
+  outline:
+    "border border-border bg-background font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50",
   ghost: "text-muted-foreground transition-colors hover:text-foreground",
   destructive: "text-red-500 transition-colors hover:underline disabled:opacity-50",
 };

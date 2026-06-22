@@ -110,6 +110,9 @@ function DesignPage() {
           <Button size="md" variant="primary">
             Primary md
           </Button>
+          <Button size="md" variant="outline">
+            Outline
+          </Button>
           <Button disabled size="md" variant="primary">
             Disabled
           </Button>

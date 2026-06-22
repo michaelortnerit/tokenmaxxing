@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useRouter } from "@tanstack/react-router";
-import { Gear, SignOut, User } from "@phosphor-icons/react/ssr";
+import { Gear, SignOut, Star, User } from "@phosphor-icons/react/ssr";
 
 import { signOut } from "../lib/api";
 import { meQueryOptions } from "../lib/queries";
 import { Avatar } from "./ui/avatar";
 import { buttonClassName } from "./ui/button";
 import { Menu } from "./ui/menu";
+
+const GITHUB_URL = "https://github.com/851-labs/tokenmaxxing";
 
 function Nav() {
   return (
@@ -61,9 +63,20 @@ function UserMenu() {
 
   if (me.isError) {
     return (
-      <Link className={buttonClassName({ variant: "primary", size: "sm" })} to="/login">
-        Log in
-      </Link>
+      <div className="flex items-center gap-2">
+        <a
+          className={buttonClassName({ variant: "outline", size: "sm" })}
+          href={GITHUB_URL}
+          rel="noreferrer"
+          target="_blank"
+        >
+          <Star className="size-4" weight="bold" />
+          Star
+        </a>
+        <Link className={buttonClassName({ variant: "primary", size: "sm" })} to="/login">
+          Log in
+        </Link>
+      </div>
     );
   }
 
