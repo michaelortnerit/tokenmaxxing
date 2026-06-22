@@ -15,7 +15,10 @@ function Nav() {
         <Link className="min-w-0 truncate text-sm font-semibold tracking-tight" to="/">
           tokenmaxxing.sh
         </Link>
-        <nav className="flex items-baseline gap-6 justify-self-center" aria-label="Primary">
+        <nav
+          className="hidden items-baseline gap-6 justify-self-center sm:flex"
+          aria-label="Primary"
+        >
           <Link
             activeProps={{ className: "text-foreground" }}
             className="text-sm text-muted-foreground transition-colors hover:text-foreground"
