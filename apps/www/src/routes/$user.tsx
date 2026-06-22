@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { LinkSimple } from "@phosphor-icons/react/ssr";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import type { ProfileDailyResponse, ProfileDailyRow } from "@tokenmaxxing/api-contract";
@@ -19,6 +20,7 @@ import { Legend, StackedBars, type StackedDay } from "../components/charts/stack
 import { WeekdayBars } from "../components/charts/weekday-bars";
 import { StatCard } from "../components/stat-card";
 import { Avatar } from "../components/ui/avatar";
+import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Code } from "../components/ui/code";
 import {
@@ -85,9 +87,12 @@ function ProfilePage() {
 
   return (
     <>
-      <header className="flex items-center gap-4 px-4 py-8">
-        <Avatar size={56} src={owner.avatarUrl} />
-        <h1 className="text-2xl font-semibold tracking-tight">{owner.login}</h1>
+      <header className="flex items-center justify-between gap-4 px-4 py-8">
+        <div className="flex min-w-0 items-center gap-4">
+          <Avatar size={56} src={owner.avatarUrl} />
+          <h1 className="min-w-0 truncate text-2xl font-semibold tracking-tight">{owner.login}</h1>
+        </div>
+        <ProfileShareButton url={profileUrl(profile)} />
       </header>
 
       {daily.days.length === 0 ? (
@@ -100,6 +105,37 @@ function ProfilePage() {
         <ProfileDashboard range={daily.range} rows={daily.days} stats={stats} />
       )}
     </>
+  );
+}
+
+function ProfileShareButton({ url }: { url: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const copyProfileUrl = async () => {
+    if (navigator.clipboard === undefined) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      return;
+    }
+  };
+
+  return (
+    <Button
+      aria-label={copied ? "Profile link copied" : "Share profile"}
+      className="shrink-0"
+      onClick={() => void copyProfileUrl()}
+      size="sm"
+      variant="outline"
+    >
+      <LinkSimple className="size-4" />
+      {copied ? "Copied" : "Share"}
+    </Button>
   );
 }
 
