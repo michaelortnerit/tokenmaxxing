@@ -61,7 +61,7 @@ function UserMenu() {
     return (
       <div className="flex items-center gap-2">
         <GithubStarLink />
-        <Avatar size={28} src={null} />
+        <Avatar size="md" src={null} />
       </div>
     );
   }
@@ -84,7 +84,7 @@ function UserMenu() {
       <GithubStarLink />
       <Menu>
         <Menu.Trigger className="flex outline-none focus-visible:ring-2 focus-visible:ring-accent">
-          <Avatar alt={user.login} size={28} src={user.avatarUrl} />
+          <Avatar alt={user.login} size="md" src={user.avatarUrl} />
         </Menu.Trigger>
         <Menu.Content>
           <Menu.Item icon={<User />} render={<Link params={{ user: user.login }} to="/$user" />}>
