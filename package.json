@@ -57,8 +57,8 @@
     "typecheck": "turbo typecheck",
     "lint": "oxlint --disable-nested-config --type-aware --type-check --no-error-on-unmatched-pattern",
     "lint:fix": "oxlint --disable-nested-config --fix --type-aware --type-check --no-error-on-unmatched-pattern",
-    "fmt": "oxfmt --check",
-    "fmt:fix": "oxfmt"
+    "fmt": "oxfmt --disable-nested-config --check",
+    "fmt:fix": "oxfmt --disable-nested-config"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",
