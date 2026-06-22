@@ -34,6 +34,16 @@ function device(input: Partial<AdminDeviceSnapshot> = {}): AdminDeviceSnapshot {
     lastSyncAt: "2026-06-19T19:30:00.000Z",
     name: "Mac.localdomain",
     platform: "darwin",
+    serviceAutoUpdateAttemptedAt: null,
+    serviceAutoUpdateCompletedAt: null,
+    serviceAutoUpdateCurrentVersion: null,
+    serviceAutoUpdateEnabled: null,
+    serviceAutoUpdateError: null,
+    serviceAutoUpdateInstalledVersion: null,
+    serviceAutoUpdateLatestVersion: null,
+    serviceAutoUpdateManager: null,
+    serviceAutoUpdateReason: null,
+    serviceAutoUpdateStatus: null,
     serviceBackend: null,
     serviceError: null,
     serviceReloadRequired: null,
@@ -136,6 +146,7 @@ describe("AdminService.listUsers", () => {
       stale: 0,
       totalDevices: 1,
       totalUsers: 1,
+      updateBlocked: 0,
       unknown: 0,
     });
     expect(response.latestCliPublishedAt).toBe("2026-06-19T19:00:00.000Z");
@@ -157,6 +168,8 @@ describe("AdminService.listUsers", () => {
       tokenCount: 2,
       totalSpendUsd: 34.56,
       totalTokens: 123_456,
+      updateBlockedReason: null,
+      updateStatus: "current",
       user: {
         login: "pondorasti",
       },
@@ -210,6 +223,7 @@ describe("AdminService.listUsers", () => {
       stale: 1,
       totalDevices: 2,
       totalUsers: 2,
+      updateBlocked: 0,
     });
     expect(response.devices.map((deviceRow) => deviceRow.status).sort()).toEqual([
       "healthy",
@@ -306,6 +320,7 @@ describe("AdminService.listUsers", () => {
       stale: 1,
       totalDevices: 2,
       totalUsers: 1,
+      updateBlocked: 0,
     });
     expect(vps).toMatchObject({
       lastUsageDate: "2026-06-13",
@@ -318,6 +333,67 @@ describe("AdminService.listUsers", () => {
       user: { login: "joelbqz" },
     });
     expect(adminDeviceRepairReason(vps?.device ?? null)).toBeNull();
+  });
+
+  it("separates update-blocked from machine health", async () => {
+    const service = await makeService(
+      makeRepository({
+        allowedEmails: ["alexandru@851.sh"],
+        snapshots: [
+          snapshot({
+            devices: [
+              device({
+                serviceAutoUpdateAttemptedAt: "2026-06-19T19:30:00.000Z",
+                serviceAutoUpdateCompletedAt: "2026-06-19T19:30:01.000Z",
+                serviceAutoUpdateCurrentVersion: "0.5.3",
+                serviceAutoUpdateEnabled: true,
+                serviceAutoUpdateError: "npm failed",
+                serviceAutoUpdateInstalledVersion: "0.5.3",
+                serviceAutoUpdateLatestVersion: "0.5.4",
+                serviceAutoUpdateManager: "npm",
+                serviceAutoUpdateReason: "package-manager-failed",
+                serviceAutoUpdateStatus: "failure",
+                version: "0.5.3",
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+
+    const response = await Effect.runPromise(service.listUsers("user_123"));
+
+    expect(response.summary).toMatchObject({
+      healthy: 1,
+      outdated: 1,
+      updateBlocked: 1,
+    });
+    expect(response.devices[0]).toMatchObject({
+      status: "healthy",
+      updateBlockedReason: "package-manager-failed",
+      updateStatus: "update-blocked",
+    });
+  });
+
+  it("does not mark old clients update-blocked when auto-update telemetry is absent", async () => {
+    const service = await makeService(
+      makeRepository({
+        allowedEmails: ["alexandru@851.sh"],
+        snapshots: [snapshot({ devices: [device({ version: "0.5.3" })] })],
+      }),
+    );
+
+    const response = await Effect.runPromise(service.listUsers("user_123"));
+
+    expect(response.summary).toMatchObject({
+      outdated: 1,
+      updateBlocked: 0,
+    });
+    expect(response.devices[0]).toMatchObject({
+      status: "healthy",
+      updateBlockedReason: null,
+      updateStatus: "outdated",
+    });
   });
 
   it("allows the pondorasti Gmail address as an internal admin email", async () => {

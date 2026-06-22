@@ -1,13 +1,17 @@
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
+import { Context } from "effect";
+import { Effect } from "effect";
 
 import {
   Forbidden,
   type AdminDeviceDebugRow,
   type AdminDeviceStatus,
+  type AdminDeviceUpdateStatus,
   type AdminUserDebugRow,
   type AdminUsersResponse,
   type OAuthProviderId,
+  type ServiceAutoUpdateManagerValue,
+  type ServiceAutoUpdateReasonValue,
+  type ServiceAutoUpdateStatusValue,
   type ServiceCheckInStatusValue,
   type ServiceRepairReasonValue,
   type ServiceRepairStatusValue,
@@ -41,6 +45,16 @@ interface AdminDeviceSnapshot {
   lastSyncAt: string | null;
   name: string;
   platform: string;
+  serviceAutoUpdateAttemptedAt: string | null;
+  serviceAutoUpdateCompletedAt: string | null;
+  serviceAutoUpdateCurrentVersion: string | null;
+  serviceAutoUpdateEnabled: boolean | null;
+  serviceAutoUpdateError: string | null;
+  serviceAutoUpdateInstalledVersion: string | null;
+  serviceAutoUpdateLatestVersion: string | null;
+  serviceAutoUpdateManager: ServiceAutoUpdateManagerValue | null;
+  serviceAutoUpdateReason: ServiceAutoUpdateReasonValue | null;
+  serviceAutoUpdateStatus: ServiceAutoUpdateStatusValue | null;
   serviceBackend: string | null;
   serviceError: string | null;
   serviceReloadRequired: boolean | null;
@@ -239,6 +253,7 @@ function adminDeviceDebugRow(
   const tokens = snapshot.tokens.filter((token) => token.deviceId === device.id);
   const activeTokenCount = tokens.filter((token) => token.revokedAt === null).length;
   const usage = snapshot.deviceUsage.find((row) => row.deviceId === device.id);
+  const updateStatus = adminDeviceUpdateStatus(device, latestCliRelease.version);
 
   return {
     activeDays: usage?.activeDays ?? 0,
@@ -254,6 +269,9 @@ function adminDeviceDebugRow(
     tokenCount: tokens.length,
     totalSpendUsd: usage?.totalSpendUsd ?? 0,
     totalTokens: usage?.totalTokens ?? 0,
+    updateBlockedReason:
+      updateStatus === "update-blocked" ? adminDeviceUpdateBlockedReason(device) : null,
+    updateStatus,
     user: {
       avatarUrl: snapshot.user.avatarUrl,
       id: snapshot.user.id,
@@ -324,6 +342,9 @@ function adminSummary(devices: readonly (typeof AdminDeviceDebugRow.Type)[], tot
       if (device.isOutdated) {
         summary.outdated += 1;
       }
+      if (device.updateStatus === "update-blocked") {
+        summary.updateBlocked += 1;
+      }
       summary.totalDevices += 1;
 
       return summary;
@@ -335,6 +356,7 @@ function adminSummary(devices: readonly (typeof AdminDeviceDebugRow.Type)[], tot
       stale: 0,
       totalDevices: 0,
       totalUsers,
+      updateBlocked: 0,
       unknown: 0,
     },
   );
@@ -367,6 +389,28 @@ function deviceVersionIsOutdated(
   }
 
   return normalizeVersion(device.version) !== normalizeVersion(latestVersion);
+}
+
+function adminDeviceUpdateStatus(
+  device: AdminDeviceSnapshot | null,
+  latestVersion: string | null,
+): AdminDeviceUpdateStatus {
+  if (device === null || device.version === null || latestVersion === null) {
+    return "unknown";
+  }
+
+  if (!deviceVersionIsOutdated(device, latestVersion)) {
+    return "current";
+  }
+
+  return device.serviceAutoUpdateStatus === "failure" ||
+    device.serviceAutoUpdateStatus === "skipped"
+    ? "update-blocked"
+    : "outdated";
+}
+
+function adminDeviceUpdateBlockedReason(device: AdminDeviceSnapshot): string | null {
+  return device.serviceAutoUpdateReason ?? device.serviceAutoUpdateError ?? null;
 }
 
 function latestDeviceFor(devices: readonly AdminDeviceSnapshot[]): AdminDeviceSnapshot | null {

@@ -1,7 +1,7 @@
 import { cliTokens, devices, usageDays, userAccounts, users } from "@tokenmaxxing/db";
 import { and, asc, eq, sql } from "drizzle-orm";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
+import { Effect } from "effect";
+import { Layer } from "effect";
 
 import type { OAuthProviderId } from "@tokenmaxxing/api-contract";
 
@@ -67,6 +67,16 @@ const makeD1AdminRepository = Effect.fn("makeD1AdminRepository")(function* () {
               lastSyncAt: devices.lastSyncAt,
               name: devices.name,
               platform: devices.platform,
+              serviceAutoUpdateAttemptedAt: devices.serviceAutoUpdateAttemptedAt,
+              serviceAutoUpdateCompletedAt: devices.serviceAutoUpdateCompletedAt,
+              serviceAutoUpdateCurrentVersion: devices.serviceAutoUpdateCurrentVersion,
+              serviceAutoUpdateEnabled: devices.serviceAutoUpdateEnabled,
+              serviceAutoUpdateError: devices.serviceAutoUpdateError,
+              serviceAutoUpdateInstalledVersion: devices.serviceAutoUpdateInstalledVersion,
+              serviceAutoUpdateLatestVersion: devices.serviceAutoUpdateLatestVersion,
+              serviceAutoUpdateManager: devices.serviceAutoUpdateManager,
+              serviceAutoUpdateReason: devices.serviceAutoUpdateReason,
+              serviceAutoUpdateStatus: devices.serviceAutoUpdateStatus,
               serviceBackend: devices.serviceBackend,
               serviceError: devices.serviceError,
               serviceReloadRequired: devices.serviceReloadRequired,
@@ -164,6 +174,21 @@ const makeD1AdminRepository = Effect.fn("makeD1AdminRepository")(function* () {
               lastSyncAt: device.lastSyncAt?.toISOString() ?? null,
               name: device.name,
               platform: device.platform,
+              serviceAutoUpdateAttemptedAt:
+                device.serviceAutoUpdateAttemptedAt?.toISOString() ?? null,
+              serviceAutoUpdateCompletedAt:
+                device.serviceAutoUpdateCompletedAt?.toISOString() ?? null,
+              serviceAutoUpdateCurrentVersion: device.serviceAutoUpdateCurrentVersion,
+              serviceAutoUpdateEnabled: device.serviceAutoUpdateEnabled,
+              serviceAutoUpdateError: device.serviceAutoUpdateError,
+              serviceAutoUpdateInstalledVersion: device.serviceAutoUpdateInstalledVersion,
+              serviceAutoUpdateLatestVersion: device.serviceAutoUpdateLatestVersion,
+              serviceAutoUpdateManager:
+                device.serviceAutoUpdateManager as AdminUserSnapshot["devices"][number]["serviceAutoUpdateManager"],
+              serviceAutoUpdateReason:
+                device.serviceAutoUpdateReason as AdminUserSnapshot["devices"][number]["serviceAutoUpdateReason"],
+              serviceAutoUpdateStatus:
+                device.serviceAutoUpdateStatus as AdminUserSnapshot["devices"][number]["serviceAutoUpdateStatus"],
               serviceBackend: device.serviceBackend,
               serviceError: device.serviceError,
               serviceReloadRequired: device.serviceReloadRequired,

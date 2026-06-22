@@ -33,6 +33,7 @@ import {
   renderLaunchdPlist,
   renderServiceWrapper,
   renderSystemdTimer,
+  runServiceAutoUpdate,
   scheduleDescription,
   serviceRepairReason,
   serviceRepairState,
@@ -42,6 +43,7 @@ import {
   serviceRunFailureState,
   serviceRunLogLine,
   serviceRunSuccessState,
+  type ServiceAutoUpdateReport,
   type ServiceMetadata,
   type ServicePaths,
   type ServiceState,
@@ -74,6 +76,37 @@ const user: AuthUser = {
   login: "alex",
   name: null,
 };
+
+function autoUpdateReport(input: Partial<ServiceAutoUpdateReport> = {}): ServiceAutoUpdateReport {
+  return {
+    attemptedAt: "2026-06-16T10:00:00.000Z",
+    completedAt: "2026-06-16T10:00:01.000Z",
+    currentVersion: "0.4.12",
+    enabled: true,
+    error: null,
+    installedVersion: null,
+    latestVersion: "0.4.13",
+    manager: "npm",
+    reason: null,
+    status: "success",
+    ...input,
+  };
+}
+
+function runAutoUpdate(
+  metadata: ServiceMetadata | null,
+  runtime: Parameters<typeof runServiceAutoUpdate>[2],
+  currentVersion = "0.4.12",
+) {
+  return Effect.runPromise(
+    runServiceAutoUpdate(metadata, { currentVersion, json: true }, runtime).pipe(
+      Effect.provideService(ConsoleService, {
+        error: () => undefined,
+        log: () => undefined,
+      }),
+    ),
+  );
+}
 
 function makeTestLayer(options: TestLayerOptions) {
   let currentConfig = options.initialConfig;
@@ -431,6 +464,7 @@ describe("serviceStateJson", () => {
     const state: ServiceState = {
       lastArch: "arm64",
       lastAttemptAt: "2026-06-16T10:00:00.000Z",
+      lastAutoUpdate: autoUpdateReport(),
       lastAutoUpdated: true,
       lastCliVersion: "0.4.12",
       lastDurationMs: 1234,
@@ -519,6 +553,159 @@ describe("service repair helpers", () => {
   });
 });
 
+describe("service auto-update reports", () => {
+  const metadata: ServiceMetadata = {
+    autoUpdate: true,
+    autoUpdateManager: "npm",
+    backend: "launchd",
+    commandPath: "/usr/local/bin/tokenmaxxing",
+    installedAt: "2026-06-16T09:00:00.000Z",
+    schedule: "syncs every 5 minutes",
+    templateVersion: 2,
+    version: 1,
+  };
+  const now = () => new Date("2026-06-16T10:00:00.000Z");
+
+  it("skips when the latest version is already installed", async () => {
+    await expect(
+      runAutoUpdate(
+        metadata,
+        {
+          fetchLatestVersion: () => Effect.succeed("0.4.12"),
+          now,
+        },
+        "0.4.12",
+      ),
+    ).resolves.toMatchObject({
+      currentVersion: "0.4.12",
+      installedVersion: "0.4.12",
+      latestVersion: "0.4.12",
+      reason: null,
+      status: "not-needed",
+    });
+  });
+
+  it("reports disabled auto-update", async () => {
+    await expect(
+      runAutoUpdate(
+        { ...metadata, autoUpdate: false },
+        {
+          fetchLatestVersion: () => Effect.succeed("0.4.13"),
+          now,
+        },
+      ),
+    ).resolves.toMatchObject({
+      enabled: false,
+      reason: "disabled",
+      status: "skipped",
+    });
+  });
+
+  it("reports missing service metadata", async () => {
+    await expect(
+      runAutoUpdate(null, {
+        fetchLatestVersion: () => Effect.succeed("0.4.13"),
+        now,
+      }),
+    ).resolves.toMatchObject({
+      enabled: false,
+      manager: null,
+      reason: "metadata-missing",
+      status: "skipped",
+    });
+  });
+
+  it("reports missing update manager metadata", async () => {
+    await expect(
+      runAutoUpdate(
+        { ...metadata, autoUpdateManager: null },
+        {
+          fetchLatestVersion: () => Effect.succeed("0.4.13"),
+          now,
+        },
+      ),
+    ).resolves.toMatchObject({
+      manager: null,
+      reason: "manager-missing",
+      status: "skipped",
+    });
+  });
+
+  it("reports unknown latest version", async () => {
+    await expect(
+      runAutoUpdate(metadata, {
+        fetchLatestVersion: () => Effect.succeed(null),
+        now,
+      }),
+    ).resolves.toMatchObject({
+      latestVersion: null,
+      reason: "latest-unknown",
+      status: "skipped",
+    });
+  });
+
+  it("reports update manager missing from PATH", async () => {
+    await expect(
+      runAutoUpdate(metadata, {
+        commandExists: () => Effect.succeed(false),
+        fetchLatestVersion: () => Effect.succeed("0.4.13"),
+        now,
+      }),
+    ).resolves.toMatchObject({
+      manager: "npm",
+      reason: "manager-not-found",
+      status: "skipped",
+    });
+  });
+
+  it("reports package-manager update failure", async () => {
+    await expect(
+      runAutoUpdate(metadata, {
+        commandExists: () => Effect.succeed(true),
+        fetchLatestVersion: () => Effect.succeed("0.4.13"),
+        now,
+        runPackageManagerUpdate: () => Effect.fail(new Error("npm failed")),
+      }),
+    ).resolves.toMatchObject({
+      error: "npm failed",
+      reason: "package-manager-failed",
+      status: "failure",
+    });
+  });
+
+  it("reports a successful update that did not change the installed version", async () => {
+    await expect(
+      runAutoUpdate(metadata, {
+        commandExists: () => Effect.succeed(true),
+        fetchLatestVersion: () => Effect.succeed("0.4.13"),
+        now,
+        readInstalledVersion: () => Effect.succeed("0.4.12"),
+        runPackageManagerUpdate: () => Effect.void,
+      }),
+    ).resolves.toMatchObject({
+      installedVersion: "0.4.12",
+      reason: "version-unchanged",
+      status: "failure",
+    });
+  });
+
+  it("reports package-manager success when the installed version is latest", async () => {
+    await expect(
+      runAutoUpdate(metadata, {
+        commandExists: () => Effect.succeed(true),
+        fetchLatestVersion: () => Effect.succeed("0.4.13"),
+        now,
+        readInstalledVersion: () => Effect.succeed("0.4.13"),
+        runPackageManagerUpdate: () => Effect.void,
+      }),
+    ).resolves.toMatchObject({
+      installedVersion: "0.4.13",
+      reason: null,
+      status: "success",
+    });
+  });
+});
+
 describe("serviceScheduledSyncSince", () => {
   it("uses the previous successful local date for scheduled syncs", () => {
     expect(
@@ -596,7 +783,10 @@ describe("service run state", () => {
       {
         arch: "arm64",
         attemptAt: "2026-06-16T10:00:00.000Z",
-        autoUpdated: false,
+        autoUpdate: autoUpdateReport({
+          reason: "manager-not-found",
+          status: "skipped",
+        }),
         durationMs: 1234,
         result: syncResult,
         since: "2026-06-16",
@@ -608,6 +798,10 @@ describe("service run state", () => {
     expect(state).toMatchObject({
       lastArch: "arm64",
       lastAttemptAt: "2026-06-16T10:00:00.000Z",
+      lastAutoUpdate: expect.objectContaining({
+        reason: "manager-not-found",
+        status: "skipped",
+      }),
       lastAutoUpdated: false,
       lastCliVersion: "0.4.12",
       lastDurationMs: 1234,

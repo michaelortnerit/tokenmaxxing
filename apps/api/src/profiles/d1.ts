@@ -1,8 +1,8 @@
 import { devices, usageDays, usageSourceStats, users } from "@tokenmaxxing/db";
 import { and, asc, desc, eq, gte, isNull, lte, sql, type SQL } from "drizzle-orm";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
+import { Effect } from "effect";
+import { Layer } from "effect";
+import { Option } from "effect";
 
 import { Drizzle } from "../database";
 import { ProfilesRepository } from "./service";

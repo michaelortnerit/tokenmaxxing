@@ -11,9 +11,9 @@ import {
   type UserAccount,
 } from "@tokenmaxxing/db";
 import { and, eq, gt } from "drizzle-orm";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
+import { Effect } from "effect";
+import { Layer } from "effect";
+import { Option } from "effect";
 
 import { Drizzle } from "../database";
 import {

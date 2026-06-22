@@ -63,6 +63,54 @@ describe("device telemetry inputs", () => {
         status: "success",
       },
     });
+
+    await expect(
+      Schema.decodeUnknownPromise(UsageCheckInInput)({
+        device: {
+          arch: "arm64",
+          name: "Mac.localdomain",
+          platform: "darwin",
+          version: "0.5.3",
+        },
+        service: {
+          autoUpdate: {
+            attemptedAt: "2026-06-21T18:00:00.000Z",
+            completedAt: "2026-06-21T18:00:01.000Z",
+            currentVersion: "0.5.3",
+            enabled: true,
+            error: "npm failed",
+            installedVersion: "0.5.3",
+            latestVersion: "0.5.4",
+            manager: "npm",
+            reason: "package-manager-failed",
+            status: "failure",
+          },
+          status: "success",
+        },
+      }),
+    ).resolves.toEqual({
+      device: {
+        arch: "arm64",
+        name: "Mac.localdomain",
+        platform: "darwin",
+        version: "0.5.3",
+      },
+      service: {
+        autoUpdate: {
+          attemptedAt: "2026-06-21T18:00:00.000Z",
+          completedAt: "2026-06-21T18:00:01.000Z",
+          currentVersion: "0.5.3",
+          enabled: true,
+          error: "npm failed",
+          installedVersion: "0.5.3",
+          latestVersion: "0.5.4",
+          manager: "npm",
+          reason: "package-manager-failed",
+          status: "failure",
+        },
+        status: "success",
+      },
+    });
   });
 });
 
@@ -123,6 +171,16 @@ describe("admin fleet responses", () => {
             lastSyncAt: "2026-06-19T19:30:00.000Z",
             name: "Mac.localdomain",
             platform: "darwin",
+            serviceAutoUpdateAttemptedAt: "2026-06-19T19:00:00.000Z",
+            serviceAutoUpdateCompletedAt: "2026-06-19T19:00:01.000Z",
+            serviceAutoUpdateCurrentVersion: "0.5.3",
+            serviceAutoUpdateEnabled: true,
+            serviceAutoUpdateError: null,
+            serviceAutoUpdateInstalledVersion: "0.5.4",
+            serviceAutoUpdateLatestVersion: "0.5.4",
+            serviceAutoUpdateManager: "npm",
+            serviceAutoUpdateReason: null,
+            serviceAutoUpdateStatus: "success",
             serviceBackend: "launchd",
             serviceError: null,
             serviceReloadRequired: false,
@@ -146,6 +204,8 @@ describe("admin fleet responses", () => {
           tokenCount: 1,
           totalSpendUsd: 12.34,
           totalTokens: 123_456,
+          updateBlockedReason: null,
+          updateStatus: "current",
           user: {
             avatarUrl: null,
             id: "user_123",
@@ -166,6 +226,7 @@ describe("admin fleet responses", () => {
         stale: 0,
         totalDevices: 1,
         totalUsers: 1,
+        updateBlocked: 0,
         unknown: 0,
       },
       users: [],

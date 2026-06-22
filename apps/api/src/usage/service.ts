@@ -1,10 +1,13 @@
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
+import { Context } from "effect";
+import { Effect } from "effect";
 
 import { DeviceMissing } from "@tokenmaxxing/api-contract";
 import type {
   CliIdentity,
   RawUsageReportInput,
+  ServiceAutoUpdateManagerValue,
+  ServiceAutoUpdateReasonValue,
+  ServiceAutoUpdateStatusValue,
   ServiceCheckInStatusValue,
   ServiceRepairReasonValue,
   ServiceRepairStatusValue,
@@ -70,6 +73,7 @@ interface UsageDevice {
 }
 
 interface UsageServiceCheckIn {
+  autoUpdate?: UsageServiceAutoUpdate | undefined;
   backend?: string | undefined;
   error?: string | undefined;
   reloadRequired?: boolean | undefined;
@@ -81,6 +85,19 @@ interface UsageServiceCheckIn {
   schedulerActive?: boolean | undefined;
   status: ServiceCheckInStatusValue;
   templateVersion?: number | undefined;
+}
+
+interface UsageServiceAutoUpdate {
+  attemptedAt?: string | null | undefined;
+  completedAt?: string | null | undefined;
+  currentVersion?: string | null | undefined;
+  enabled: boolean;
+  error?: string | null | undefined;
+  installedVersion?: string | null | undefined;
+  latestVersion?: string | null | undefined;
+  manager: ServiceAutoUpdateManagerValue | null;
+  reason: ServiceAutoUpdateReasonValue | null;
+  status: ServiceAutoUpdateStatusValue;
 }
 
 interface UsageRepositoryShape {

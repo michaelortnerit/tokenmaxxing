@@ -1,7 +1,7 @@
 import { devices, usageDays, usageRawBatches, usageSourceStats } from "@tokenmaxxing/db";
 import { eq } from "drizzle-orm";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
+import { Effect } from "effect";
+import { Layer } from "effect";
 
 import { Drizzle } from "../database";
 import { RawUsageObjectStore } from "./raw-store";
@@ -22,6 +22,20 @@ const makeD1UsageRepository = Effect.fn("makeD1UsageRepository")(function* () {
               lastCheckInAt: checkedInAt,
               name: device.name,
               platform: device.platform,
+              ...(service.autoUpdate === undefined
+                ? {}
+                : {
+                    serviceAutoUpdateAttemptedAt: optionalDate(service.autoUpdate.attemptedAt),
+                    serviceAutoUpdateCompletedAt: optionalDate(service.autoUpdate.completedAt),
+                    serviceAutoUpdateCurrentVersion: service.autoUpdate.currentVersion ?? null,
+                    serviceAutoUpdateEnabled: service.autoUpdate.enabled,
+                    serviceAutoUpdateError: service.autoUpdate.error ?? null,
+                    serviceAutoUpdateInstalledVersion: service.autoUpdate.installedVersion ?? null,
+                    serviceAutoUpdateLatestVersion: service.autoUpdate.latestVersion ?? null,
+                    serviceAutoUpdateManager: service.autoUpdate.manager,
+                    serviceAutoUpdateReason: service.autoUpdate.reason,
+                    serviceAutoUpdateStatus: service.autoUpdate.status,
+                  }),
               serviceBackend: service.backend ?? null,
               serviceError: service.error ?? null,
               serviceReloadRequired: service.reloadRequired ?? null,
@@ -186,8 +200,8 @@ const makeD1UsageRepository = Effect.fn("makeD1UsageRepository")(function* () {
 
 const UsageRepositoryLive = Layer.effect(UsageRepository, makeD1UsageRepository());
 
-function optionalDate(value: string | undefined): Date | null {
-  if (value === undefined) {
+function optionalDate(value: string | null | undefined): Date | null {
+  if (value === undefined || value === null) {
     return null;
   }
 

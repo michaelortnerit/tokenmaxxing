@@ -1,4 +1,4 @@
-import * as Effect from "effect/Effect";
+import { Effect } from "effect";
 
 /**
  * Token primitives for auth: opaque bearer tokens (random, hashed at rest).

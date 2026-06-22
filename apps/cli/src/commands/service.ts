@@ -8,6 +8,9 @@ import { promisify } from "node:util";
 import { Data, Effect, Option } from "effect";
 import { Command, Flag } from "effect/unstable/cli";
 import type {
+  ServiceAutoUpdateManagerValue,
+  ServiceAutoUpdateReasonValue,
+  ServiceAutoUpdateStatusValue,
   ServiceCheckInStatusValue,
   ServiceRepairReasonValue,
   ServiceRepairStatusValue,
@@ -41,6 +44,7 @@ const SERVICE_INTERVAL_SECONDS = SERVICE_INTERVAL_MINUTES * 60;
 const SERVICE_JITTER_MAX_MS = 60 * 1000;
 const SERVICE_LOG_MAX_BYTES = 5 * 1024 * 1024;
 const SERVICE_LOG_ROTATIONS = 3;
+const NPM_LATEST_URL = "https://registry.npmjs.org/@851-labs%2Ftokenmaxxing/latest";
 const SERVICE_UPLOAD_RETRY_POLICY: UploadRetryPolicy = {
   attempts: 3,
   backoffMs: [1_000, 4_000, 16_000],
@@ -134,6 +138,29 @@ interface ServiceRunOptions {
   scheduled: boolean;
 }
 
+interface ServiceAutoUpdateReport {
+  attemptedAt?: string | null | undefined;
+  completedAt?: string | null | undefined;
+  currentVersion?: string | null | undefined;
+  enabled: boolean;
+  error?: string | null | undefined;
+  installedVersion?: string | null | undefined;
+  latestVersion?: string | null | undefined;
+  manager: ServiceAutoUpdateManagerValue | null;
+  reason: ServiceAutoUpdateReasonValue | null;
+  status: ServiceAutoUpdateStatusValue;
+}
+
+interface ServiceAutoUpdateRuntime {
+  commandExists?: ((command: string) => Effect.Effect<boolean, never>) | undefined;
+  fetchLatestVersion?: (() => Effect.Effect<string | null, never>) | undefined;
+  now?: (() => Date) | undefined;
+  readInstalledVersion?: ((commandPath: string) => Effect.Effect<string | null, never>) | undefined;
+  runPackageManagerUpdate?:
+    | ((manager: AutoUpdateManager) => Effect.Effect<void, unknown>)
+    | undefined;
+}
+
 interface ServiceRepairOptions {
   deferred?: boolean | undefined;
   json?: boolean | undefined;
@@ -143,6 +170,7 @@ interface ServiceRepairOptions {
 interface ServiceState {
   lastArch?: string;
   lastAttemptAt?: string;
+  lastAutoUpdate?: ServiceAutoUpdateReport;
   lastAutoUpdated?: boolean;
   lastCliVersion?: string;
   lastDurationMs?: number;
@@ -184,6 +212,7 @@ interface ServiceNativeSchedulerStatus {
 }
 
 interface ServiceCheckIn {
+  autoUpdate?: ServiceAutoUpdateReport | undefined;
   backend: ServiceBackend;
   error?: string | undefined;
   reloadRequired: boolean;
@@ -710,6 +739,7 @@ function serviceStatusEffect(options: { json?: boolean | undefined } = {}) {
         autoUpdate: formatServiceStatusAutoUpdate(metadata),
         backend: paths.backend,
         installed,
+        lastAutoUpdate: state?.lastAutoUpdate ?? null,
         lastAutoUpdated: state?.lastAutoUpdated ?? null,
         lastDurationMs: state?.lastDurationMs ?? null,
         lastError: state?.lastError,
@@ -1046,7 +1076,11 @@ function runServiceSyncOnce(paths: ServicePaths, options: ServiceRunOptions) {
       status: "started",
     }).pipe(Effect.ignore);
 
-    const autoUpdated = yield* runServiceAutoUpdate(metadata, { json: options.json });
+    const autoUpdate = yield* runServiceAutoUpdate(metadata, {
+      currentVersion: cliVersion,
+      json: options.json,
+    });
+    const autoUpdated = autoUpdate.status === "success";
 
     yield* writeServiceState(paths.statePath, {
       ...currentState,
@@ -1100,6 +1134,7 @@ function runServiceSyncOnce(paths: ServicePaths, options: ServiceRunOptions) {
       );
       yield* writeServiceCheckIn(auth, {
         ...baseCheckIn,
+        autoUpdate,
         ...serviceRepairCheckIn(repairReport),
         error: finalFailedState.lastError,
         status: "failure",
@@ -1111,7 +1146,7 @@ function runServiceSyncOnce(paths: ServicePaths, options: ServiceRunOptions) {
     const successState = serviceRunSuccessState(currentState, {
       arch: cliArch,
       attemptAt: startedAtIso,
-      autoUpdated,
+      autoUpdate,
       durationMs: Date.now() - startedAtMs,
       reloadRequired,
       result: result.value,
@@ -1141,6 +1176,7 @@ function runServiceSyncOnce(paths: ServicePaths, options: ServiceRunOptions) {
     );
     yield* writeServiceCheckIn(auth, {
       ...baseCheckIn,
+      autoUpdate,
       ...serviceRepairCheckIn(repairReport),
       status: "success",
     }).pipe(Effect.ignore);
@@ -1187,6 +1223,7 @@ function writeServiceCheckIn(auth: SyncAuth, checkIn: ServiceCheckIn) {
         version: packageJson.version,
       },
       service: {
+        autoUpdate: checkIn.autoUpdate,
         backend: checkIn.backend,
         error: checkIn.error,
         reloadRequired: checkIn.reloadRequired,
@@ -1499,7 +1536,7 @@ function serviceRunSuccessState(
   input: {
     arch: string;
     attemptAt: string;
-    autoUpdated: boolean;
+    autoUpdate: ServiceAutoUpdateReport;
     durationMs: number;
     reloadRequired?: boolean | undefined;
     result: SyncResult;
@@ -1513,7 +1550,8 @@ function serviceRunSuccessState(
     ...currentState,
     lastArch: input.arch,
     lastAttemptAt: input.attemptAt,
-    lastAutoUpdated: input.autoUpdated,
+    lastAutoUpdate: input.autoUpdate,
+    lastAutoUpdated: input.autoUpdate.status === "success",
     lastCliVersion: input.version,
     lastDurationMs: input.durationMs,
     lastError: undefined,
@@ -1580,6 +1618,7 @@ function serviceSourcesForState(result: SyncResult): ServiceSourceState[] {
 function serviceRunLogLine(state: ServiceState, status: "failure" | "success") {
   return {
     arch: state.lastArch,
+    autoUpdate: state.lastAutoUpdate,
     autoUpdated: state.lastAutoUpdated,
     durationMs: state.lastDurationMs,
     error: status === "failure" ? state.lastError : undefined,
@@ -1854,6 +1893,7 @@ function serviceStateJson(state: ServiceState): Partial<ServiceState> {
   return {
     ...(state.lastArch === undefined ? {} : { lastArch: state.lastArch }),
     ...(state.lastAttemptAt === undefined ? {} : { lastAttemptAt: state.lastAttemptAt }),
+    ...(state.lastAutoUpdate === undefined ? {} : { lastAutoUpdate: state.lastAutoUpdate }),
     ...(state.lastAutoUpdated === undefined ? {} : { lastAutoUpdated: state.lastAutoUpdated }),
     ...(state.lastCliVersion === undefined ? {} : { lastCliVersion: state.lastCliVersion }),
     ...(state.lastDurationMs === undefined ? {} : { lastDurationMs: state.lastDurationMs }),
@@ -1889,13 +1929,60 @@ function commandExists(command: string): Effect.Effect<boolean, never> {
 
 function runServiceAutoUpdate(
   metadata: ServiceMetadata | null,
-  options: { json?: boolean | undefined } = {},
-): Effect.Effect<boolean, never, ConsoleService> {
+  options: {
+    currentVersion: string;
+    json?: boolean | undefined;
+  },
+  runtime: ServiceAutoUpdateRuntime = {},
+): Effect.Effect<ServiceAutoUpdateReport, never, ConsoleService> {
   return Effect.gen(function* () {
     const console = yield* Effect.service(ConsoleService);
+    const now = runtime.now ?? (() => new Date());
+    const attemptedAt = now().toISOString();
+    const fetchLatestVersion = runtime.fetchLatestVersion ?? fetchLatestCliVersion;
+    const commandExists_ = runtime.commandExists ?? commandExists;
+    const runUpdate = runtime.runPackageManagerUpdate ?? runPackageManagerUpdate;
+    const readInstalledVersion = runtime.readInstalledVersion ?? readInstalledCliVersion;
+    const latestVersion = yield* fetchLatestVersion();
 
     if (metadata === null || metadata.autoUpdate === false) {
-      return false;
+      return serviceAutoUpdateReport({
+        attemptedAt,
+        completedAt: now().toISOString(),
+        currentVersion: options.currentVersion,
+        enabled: metadata?.autoUpdate ?? false,
+        latestVersion,
+        manager: metadata?.autoUpdateManager ?? null,
+        reason: metadata === null ? "metadata-missing" : "disabled",
+        status: "skipped",
+      });
+    }
+
+    if (latestVersion === null) {
+      return serviceAutoUpdateReport({
+        attemptedAt,
+        completedAt: now().toISOString(),
+        currentVersion: options.currentVersion,
+        enabled: true,
+        latestVersion,
+        manager: metadata.autoUpdateManager ?? null,
+        reason: "latest-unknown",
+        status: "skipped",
+      });
+    }
+
+    if (normalizeVersion(options.currentVersion) === normalizeVersion(latestVersion)) {
+      return serviceAutoUpdateReport({
+        attemptedAt,
+        completedAt: now().toISOString(),
+        currentVersion: options.currentVersion,
+        enabled: true,
+        installedVersion: options.currentVersion,
+        latestVersion,
+        manager: metadata.autoUpdateManager ?? null,
+        reason: null,
+        status: "not-needed",
+      });
     }
 
     const manager = metadata.autoUpdateManager;
@@ -1905,31 +1992,163 @@ function runServiceAutoUpdate(
           console.log("Auto-update skipped; package manager was not detected");
         });
       }
-      return false;
+      return serviceAutoUpdateReport({
+        attemptedAt,
+        completedAt: now().toISOString(),
+        currentVersion: options.currentVersion,
+        enabled: true,
+        latestVersion,
+        manager: null,
+        reason: "manager-missing",
+        status: "skipped",
+      });
     }
 
-    const managerExists = yield* commandExists(manager);
+    const managerExists = yield* commandExists_(manager);
     if (!managerExists) {
       if (!options.json) {
         yield* Effect.sync(() => {
           console.log(`Auto-update skipped; ${manager} not found`);
         });
       }
-      return false;
+      return serviceAutoUpdateReport({
+        attemptedAt,
+        completedAt: now().toISOString(),
+        currentVersion: options.currentVersion,
+        enabled: true,
+        latestVersion,
+        manager,
+        reason: "manager-not-found",
+        status: "skipped",
+      });
     }
 
-    return yield* runPackageManagerUpdate(manager).pipe(
-      Effect.as(true),
-      Effect.catch(() =>
-        options.json
-          ? Effect.succeed(false)
-          : Effect.sync(() => {
-              console.log(`Auto-update failed; continuing with sync`);
-              return false;
-            }),
-      ),
+    const updateResult = yield* runUpdate(manager).pipe(
+      Effect.match({
+        onFailure: (cause) => ({ _tag: "failure" as const, cause }),
+        onSuccess: () => ({ _tag: "success" as const }),
+      }),
     );
+    if (updateResult._tag === "failure") {
+      if (!options.json) {
+        yield* Effect.sync(() => {
+          console.log(`Auto-update failed; continuing with sync`);
+        });
+      }
+
+      return serviceAutoUpdateReport({
+        attemptedAt,
+        completedAt: now().toISOString(),
+        currentVersion: options.currentVersion,
+        enabled: true,
+        error: formatAutoUpdateError(updateResult.cause),
+        latestVersion,
+        manager,
+        reason: "package-manager-failed",
+        status: "failure",
+      });
+    }
+
+    const installedVersion = yield* readInstalledVersion(metadata.commandPath);
+    if (
+      installedVersion === null ||
+      normalizeVersion(installedVersion) !== normalizeVersion(latestVersion)
+    ) {
+      return serviceAutoUpdateReport({
+        attemptedAt,
+        completedAt: now().toISOString(),
+        currentVersion: options.currentVersion,
+        enabled: true,
+        installedVersion,
+        latestVersion,
+        manager,
+        reason: "version-unchanged",
+        status: "failure",
+      });
+    }
+
+    return serviceAutoUpdateReport({
+      attemptedAt,
+      completedAt: now().toISOString(),
+      currentVersion: options.currentVersion,
+      enabled: true,
+      installedVersion,
+      latestVersion,
+      manager,
+      reason: null,
+      status: "success",
+    });
   });
+}
+
+function serviceAutoUpdateReport(input: ServiceAutoUpdateReport): ServiceAutoUpdateReport {
+  return {
+    attemptedAt: input.attemptedAt ?? null,
+    completedAt: input.completedAt ?? null,
+    currentVersion: input.currentVersion ?? null,
+    enabled: input.enabled,
+    error: input.error ?? null,
+    installedVersion: input.installedVersion ?? null,
+    latestVersion: input.latestVersion ?? null,
+    manager: input.manager,
+    reason: input.reason,
+    status: input.status,
+  };
+}
+
+function fetchLatestCliVersion(): Effect.Effect<string | null, never> {
+  return Effect.tryPromise({
+    try: async () => {
+      const response = await fetch(NPM_LATEST_URL, {
+        headers: { accept: "application/json" },
+      });
+      if (!response.ok) {
+        return null;
+      }
+
+      return versionFromPackageJson(await response.json());
+    },
+    catch: (cause) => cause,
+  }).pipe(Effect.catch(() => Effect.succeed(null)));
+}
+
+function readInstalledCliVersion(commandPath: string): Effect.Effect<string | null, never> {
+  return Effect.tryPromise({
+    try: async () => {
+      const { stderr, stdout } = await execFilePromise(commandPath, ["--version"], {
+        windowsHide: true,
+      });
+
+      return parseCliVersion(`${stdout}\n${stderr}`);
+    },
+    catch: (cause) => cause,
+  }).pipe(Effect.catch(() => Effect.succeed(null)));
+}
+
+function versionFromPackageJson(body: unknown): string | null {
+  if (body === null || typeof body !== "object") {
+    return null;
+  }
+
+  const version = (body as { version?: unknown }).version;
+  return typeof version === "string" && version.length > 0 ? version : null;
+}
+
+function parseCliVersion(output: string): string | null {
+  const match = /v?(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)/.exec(output);
+  return match?.[1] ?? null;
+}
+
+function normalizeVersion(version: string): string {
+  return version.trim().replace(/^v/i, "");
+}
+
+function formatAutoUpdateError(cause: unknown): string {
+  if (cause instanceof Error && cause.message.length > 0) {
+    return cause.message;
+  }
+
+  return String(cause);
 }
 
 function runPackageManagerUpdate(manager: AutoUpdateManager): Effect.Effect<void, unknown> {
@@ -2807,6 +3026,7 @@ export {
   renderServiceWrapper,
   renderSystemdTimer,
   refreshServiceAfterUpdate,
+  runServiceAutoUpdate,
   scheduleDeferredServiceRepair,
   scheduleDescription,
   serviceRepairReason,
@@ -2841,6 +3061,7 @@ export type {
   ServiceBackend,
   ServiceInstallOptions,
   ServiceMetadata,
+  ServiceAutoUpdateReport,
   ServicePaths,
   ServiceRepairReport,
   ServiceState,

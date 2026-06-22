@@ -145,6 +145,18 @@ describe("UsageService.checkIn", () => {
 
     const result = await Effect.runPromise(
       service.checkIn({ deviceId: "device_123", tokenId: "token_123", user }, device, {
+        autoUpdate: {
+          attemptedAt: "2026-06-21T18:00:00.000Z",
+          completedAt: "2026-06-21T18:00:01.000Z",
+          currentVersion: "0.4.13",
+          enabled: true,
+          error: "npm failed",
+          installedVersion: "0.4.13",
+          latestVersion: "0.4.14",
+          manager: "npm",
+          reason: "package-manager-failed",
+          status: "failure",
+        },
         repairAttemptedAt: "2026-06-21T18:00:00.000Z",
         repairReason: "scheduler-inactive",
         repairStatus: "scheduled",
@@ -158,6 +170,18 @@ describe("UsageService.checkIn", () => {
       "device_123",
       device,
       {
+        autoUpdate: {
+          attemptedAt: "2026-06-21T18:00:00.000Z",
+          completedAt: "2026-06-21T18:00:01.000Z",
+          currentVersion: "0.4.13",
+          enabled: true,
+          error: "npm failed",
+          installedVersion: "0.4.13",
+          latestVersion: "0.4.14",
+          manager: "npm",
+          reason: "package-manager-failed",
+          status: "failure",
+        },
         repairAttemptedAt: "2026-06-21T18:00:00.000Z",
         repairReason: "scheduler-inactive",
         repairStatus: "scheduled",

@@ -152,6 +152,39 @@ const ServiceCheckInStatus = Schema.Literals(["started", "success", "failure"]);
 
 type ServiceCheckInStatusValue = typeof ServiceCheckInStatus.Type;
 
+const ServiceAutoUpdateManager = Schema.Literals(["bun", "npm", "pnpm", "yarn"]);
+
+type ServiceAutoUpdateManagerValue = typeof ServiceAutoUpdateManager.Type;
+
+const ServiceAutoUpdateStatus = Schema.Literals(["failure", "not-needed", "skipped", "success"]);
+
+type ServiceAutoUpdateStatusValue = typeof ServiceAutoUpdateStatus.Type;
+
+const ServiceAutoUpdateReason = Schema.Literals([
+  "disabled",
+  "latest-unknown",
+  "manager-missing",
+  "manager-not-found",
+  "metadata-missing",
+  "package-manager-failed",
+  "version-unchanged",
+]);
+
+type ServiceAutoUpdateReasonValue = typeof ServiceAutoUpdateReason.Type;
+
+const ServiceAutoUpdate = Schema.Struct({
+  attemptedAt: Schema.optional(Schema.NullOr(Schema.String)),
+  completedAt: Schema.optional(Schema.NullOr(Schema.String)),
+  currentVersion: Schema.optional(Schema.NullOr(Schema.String)),
+  enabled: Schema.Boolean,
+  error: Schema.optional(Schema.NullOr(Schema.String)),
+  installedVersion: Schema.optional(Schema.NullOr(Schema.String)),
+  latestVersion: Schema.optional(Schema.NullOr(Schema.String)),
+  manager: Schema.NullOr(ServiceAutoUpdateManager),
+  reason: Schema.NullOr(ServiceAutoUpdateReason),
+  status: ServiceAutoUpdateStatus,
+});
+
 const ServiceRepairReason = Schema.Literals([
   "auto-updated",
   "reload-required",
@@ -173,6 +206,7 @@ const UsageCheckInInput = Schema.Struct({
     version: Schema.optional(Schema.String),
   }),
   service: Schema.Struct({
+    autoUpdate: Schema.optional(ServiceAutoUpdate),
     backend: Schema.optional(Schema.String),
     error: Schema.optional(Schema.String),
     reloadRequired: Schema.optional(Schema.Boolean),
@@ -310,6 +344,15 @@ const AdminDeviceStatus = Schema.Literals(["healthy", "repair-needed", "stale", 
 
 type AdminDeviceStatus = typeof AdminDeviceStatus.Type;
 
+const AdminDeviceUpdateStatus = Schema.Literals([
+  "current",
+  "outdated",
+  "unknown",
+  "update-blocked",
+]);
+
+type AdminDeviceUpdateStatus = typeof AdminDeviceUpdateStatus.Type;
+
 const AdminLatestDevice = Schema.Struct({
   arch: Schema.NullOr(Schema.String),
   createdAt: Schema.String,
@@ -318,6 +361,16 @@ const AdminLatestDevice = Schema.Struct({
   lastSyncAt: Schema.NullOr(Schema.String),
   name: Schema.String,
   platform: Schema.String,
+  serviceAutoUpdateAttemptedAt: Schema.NullOr(Schema.String),
+  serviceAutoUpdateCompletedAt: Schema.NullOr(Schema.String),
+  serviceAutoUpdateCurrentVersion: Schema.NullOr(Schema.String),
+  serviceAutoUpdateEnabled: Schema.NullOr(Schema.Boolean),
+  serviceAutoUpdateError: Schema.NullOr(Schema.String),
+  serviceAutoUpdateInstalledVersion: Schema.NullOr(Schema.String),
+  serviceAutoUpdateLatestVersion: Schema.NullOr(Schema.String),
+  serviceAutoUpdateManager: Schema.NullOr(ServiceAutoUpdateManager),
+  serviceAutoUpdateReason: Schema.NullOr(ServiceAutoUpdateReason),
+  serviceAutoUpdateStatus: Schema.NullOr(ServiceAutoUpdateStatus),
   serviceBackend: Schema.NullOr(Schema.String),
   serviceError: Schema.NullOr(Schema.String),
   serviceReloadRequired: Schema.NullOr(Schema.Boolean),
@@ -346,6 +399,8 @@ const AdminDeviceDebugRow = Schema.Struct({
   tokenCount: Schema.Number,
   totalSpendUsd: Schema.Number,
   totalTokens: Schema.Number,
+  updateBlockedReason: Schema.NullOr(Schema.String),
+  updateStatus: AdminDeviceUpdateStatus,
   user: AuthUser,
 });
 
@@ -394,6 +449,7 @@ const AdminUsersResponse = Schema.Struct({
     stale: Schema.Number,
     totalDevices: Schema.Number,
     totalUsers: Schema.Number,
+    updateBlocked: Schema.Number,
     unknown: Schema.Number,
   }),
   users: Schema.Array(AdminUserDebugRow),
@@ -404,6 +460,7 @@ type AdminUsersResponse = typeof AdminUsersResponse.Type;
 export {
   AdminDeviceDebugRow,
   AdminDeviceStatus,
+  AdminDeviceUpdateStatus,
   AdminUserDebugRow,
   AdminUsersResponse,
   AuthUser,
@@ -432,6 +489,10 @@ export {
   ProfileResponse,
   ProfileStats,
   RawUsageReportInput,
+  ServiceAutoUpdate,
+  ServiceAutoUpdateManager,
+  ServiceAutoUpdateReason,
+  ServiceAutoUpdateStatus,
   ServiceCheckInStatus,
   ServiceRepairReason,
   ServiceRepairStatus,
@@ -445,4 +506,11 @@ export {
   UsageRawReportKind,
 };
 
-export type { ServiceCheckInStatusValue, ServiceRepairReasonValue, ServiceRepairStatusValue };
+export type {
+  ServiceAutoUpdateManagerValue,
+  ServiceAutoUpdateReasonValue,
+  ServiceAutoUpdateStatusValue,
+  ServiceCheckInStatusValue,
+  ServiceRepairReasonValue,
+  ServiceRepairStatusValue,
+};

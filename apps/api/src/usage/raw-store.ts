@@ -1,7 +1,5 @@
-import * as Context from "effect/Context";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
+import { Context, Data, Effect } from "effect";
+import { Layer } from "effect";
 
 class RawUsageStorageError extends Data.TaggedError("RawUsageStorageError")<{
   readonly cause: unknown;

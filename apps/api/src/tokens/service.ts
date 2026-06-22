@@ -1,6 +1,6 @@
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
+import { Context } from "effect";
+import { Effect } from "effect";
+import { Option } from "effect";
 
 import { DeviceNotFound, TokenNotFound } from "@tokenmaxxing/api-contract";
 import type { CliIdentity, CliTokenSummary, DeviceSummary } from "@tokenmaxxing/api-contract";

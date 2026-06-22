@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
+import { Effect } from "effect";
+import { Option } from "effect";
 
 import {
   AccountLinkConflict,

@@ -60,7 +60,7 @@ function InternalPage() {
               <th className="w-[15%] p-3 font-medium">User</th>
               <th className="w-[16%] p-3 font-medium">Version</th>
               <th className="hidden w-[12%] p-3 font-medium lg:table-cell">System</th>
-              <th className="w-[22%] p-3 font-medium">Status</th>
+              <th className="w-[17%] p-3 font-medium">Status</th>
               <th className="w-[12%] p-3 font-medium">Last check-in</th>
               <th className="hidden w-[10%] whitespace-nowrap p-3 font-medium md:table-cell">
                 Last usage
@@ -86,10 +86,7 @@ function InternalPage() {
                   </Link>
                 </td>
                 <td className="p-3 align-top">
-                  <div className="flex flex-nowrap items-center gap-2">
-                    <span className="font-medium">{formatVersion(row.device.version)}</span>
-                    {row.isOutdated ? <OutdatedPill /> : null}
-                  </div>
+                  <VersionCell row={row} />
                 </td>
                 <td className="hidden p-3 align-top font-mono text-muted-foreground lg:table-cell">
                   {formatDeviceSystem(row.device)}
@@ -152,9 +149,33 @@ function StatusPill({ status, title }: { status: AdminDeviceStatus; title?: stri
 
 function OutdatedPill() {
   return (
-    <span className="inline-flex shrink-0 items-center border border-blue-500/40 bg-blue-500/10 px-2 py-0.5 font-mono text-xs text-blue-600 dark:text-blue-400">
+    <span className="inline-flex shrink-0 items-center whitespace-nowrap border border-blue-500/40 bg-blue-500/10 px-2 py-0.5 font-mono text-xs text-blue-600 dark:text-blue-400">
       outdated
     </span>
+  );
+}
+
+function UpdateBlockedPill({ reason }: { reason: string | null }) {
+  return (
+    <span
+      className="inline-flex shrink-0 items-center whitespace-nowrap border border-amber-500/50 bg-amber-500/10 px-2 py-0.5 font-mono text-xs text-amber-700 dark:text-amber-300"
+      title={reason === null ? undefined : updateBlockedReasonLabel(reason)}
+    >
+      update blocked
+    </span>
+  );
+}
+
+function VersionCell({ row }: { row: AdminUsersData["devices"][number] }) {
+  return (
+    <div className="flex flex-nowrap items-center gap-2">
+      <span className="font-medium">{formatVersion(row.device.version)}</span>
+      {row.updateStatus === "update-blocked" ? (
+        <UpdateBlockedPill reason={row.updateBlockedReason} />
+      ) : row.isOutdated ? (
+        <OutdatedPill />
+      ) : null}
+    </div>
   );
 }
 
@@ -177,6 +198,7 @@ function fleetSummary(data: AdminUsersData): string {
   return [
     `${formatInteger(data.summary.healthy)} healthy`,
     `${formatInteger(data.summary.outdated)} outdated`,
+    `${formatInteger(data.summary.updateBlocked)} update blocked`,
     `${formatInteger(data.summary.repairNeeded)} repair needed`,
     `${formatInteger(data.summary.stale)} stale`,
     `${formatInteger(data.summary.unknown)} unknown`,
@@ -208,6 +230,28 @@ function serviceStatusTitle(row: AdminUsersData["devices"][number]): string | un
       ? undefined
       : `repair completed: ${device.serviceRepairCompletedAt}`,
     device.serviceRepairError === null ? undefined : `repair error: ${device.serviceRepairError}`,
+    device.serviceAutoUpdateStatus === null
+      ? undefined
+      : `auto-update: ${device.serviceAutoUpdateStatus}${
+          device.serviceAutoUpdateReason === null
+            ? ""
+            : ` (${updateBlockedReasonLabel(device.serviceAutoUpdateReason)})`
+        }`,
+    device.serviceAutoUpdateManager === null
+      ? undefined
+      : `auto-update manager: ${device.serviceAutoUpdateManager}`,
+    device.serviceAutoUpdateCurrentVersion === null
+      ? undefined
+      : `auto-update current: ${formatVersion(device.serviceAutoUpdateCurrentVersion)}`,
+    device.serviceAutoUpdateLatestVersion === null
+      ? undefined
+      : `auto-update latest: ${formatVersion(device.serviceAutoUpdateLatestVersion)}`,
+    device.serviceAutoUpdateInstalledVersion === null
+      ? undefined
+      : `auto-update installed: ${formatVersion(device.serviceAutoUpdateInstalledVersion)}`,
+    device.serviceAutoUpdateError === null
+      ? undefined
+      : `auto-update error: ${device.serviceAutoUpdateError}`,
     repairReasonForDevice(device) === null
       ? undefined
       : "manual repair: tokenmaxxing service repair",
@@ -235,6 +279,10 @@ function repairReasonForDevice(
   }
 
   return null;
+}
+
+function updateBlockedReasonLabel(reason: string): string {
+  return reason.replaceAll("-", " ");
 }
 
 function repairReasonLabel(reason: ServiceRepairReasonValue): string {
