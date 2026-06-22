@@ -3,6 +3,19 @@
 All notable changes to tokenmaxxing are documented here. Versions are anchored to the
 `cli-v*` release tags because the CLI is the project's current released artifact.
 
+## Unreleased
+
+## 0.4.16 - 2026-06-21
+
+### Changed
+
+- Removed the service auto-update opt-out so scheduled services always attempt CLI updates when package-manager metadata is available.
+- Bumped the service template so installed schedulers refresh away from legacy auto-update metadata.
+
+### Fixed
+
+- Made service install and repair keep working when the package manager cannot be detected, while reporting the missing manager through auto-update telemetry.
+
 ## 0.4.15 - 2026-06-21
 
 ### Added
