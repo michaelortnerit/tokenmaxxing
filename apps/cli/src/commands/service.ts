@@ -197,6 +197,7 @@ interface ServiceAutoUpdateRuntime {
   fetchRunnerRelease?:
     | ((
         target: ServiceRunnerTarget,
+        versionSpecifier: string,
       ) => Effect.Effect<ServiceRunnerRelease | null, ServiceRunnerUpdateError>)
     | undefined;
   installRunnerRelease?:
@@ -2461,10 +2462,11 @@ function runServiceRunnerAutoUpdate(
     }
     const paths = options.paths;
 
-    const fetchRunnerRelease = runtime.fetchRunnerRelease ?? fetchLatestServiceRunnerRelease;
+    const runnerChannel = serviceRunnerReleaseChannel(options.currentVersion);
+    const fetchRunnerRelease = runtime.fetchRunnerRelease ?? fetchServiceRunnerRelease;
     let release: ServiceRunnerRelease | null = null;
     for (const target of targets) {
-      const fetchResult = yield* fetchRunnerRelease(target).pipe(
+      const fetchResult = yield* fetchRunnerRelease(target, runnerChannel).pipe(
         Effect.match({
           onFailure: (cause) => ({ _tag: "failure" as const, cause }),
           onSuccess: (value) => ({ _tag: "success" as const, value }),
@@ -2504,7 +2506,7 @@ function runServiceRunnerAutoUpdate(
       });
     }
 
-    if (normalizeVersion(options.currentVersion) === normalizeVersion(release.version)) {
+    if (!serviceRunnerReleaseIsUpdateCandidate(options.currentVersion, release.version)) {
       return serviceAutoUpdateReport({
         attemptedAt,
         completedAt: now().toISOString(),
@@ -2681,16 +2683,20 @@ function fetchLatestCliVersion(): Effect.Effect<string | null, never> {
   }).pipe(Effect.catch(() => Effect.succeed(null)));
 }
 
-function fetchLatestServiceRunnerRelease(
+function fetchServiceRunnerRelease(
   target: ServiceRunnerTarget,
+  versionSpecifier: string,
 ): Effect.Effect<ServiceRunnerRelease | null, ServiceRunnerUpdateError> {
   return Effect.tryPromise({
     try: async () => {
       const packageName = serviceRunnerPackageName(target);
-      const response = await fetch(`${npmRegistryPackageUrl(packageName)}/latest`, {
-        headers: { accept: "application/json" },
-        signal: AbortSignal.timeout(SERVICE_FETCH_TIMEOUT_MS),
-      });
+      const response = await fetch(
+        `${npmRegistryPackageUrl(packageName)}/${encodeURIComponent(versionSpecifier)}`,
+        {
+          headers: { accept: "application/json" },
+          signal: AbortSignal.timeout(SERVICE_FETCH_TIMEOUT_MS),
+        },
+      );
       if (response.status === 404) {
         return null;
       }
@@ -2739,7 +2745,7 @@ function serviceRunnerReleaseFromPackageJson(
   const dist = (body as { dist?: unknown }).dist;
   if (
     typeof version !== "string" ||
-    version.length === 0 ||
+    parseServiceVersion(version) === null ||
     dist === null ||
     typeof dist !== "object"
   ) {
@@ -3007,7 +3013,135 @@ function parseCliVersion(output: string): string | null {
 }
 
 function normalizeVersion(version: string): string {
-  return version.trim().replace(/^v/i, "");
+  return version.trim().replace(/^v/i, "").replace(/\+.*/, "");
+}
+
+interface ParsedServiceVersion {
+  major: number;
+  minor: number;
+  patch: number;
+  prerelease: readonly string[];
+}
+
+function serviceRunnerReleaseChannel(version: string): string {
+  const parsed = parseServiceVersion(version);
+  return parsed === null || parsed.prerelease.length === 0 ? "latest" : parsed.prerelease[0]!;
+}
+
+function serviceRunnerReleaseIsNewer(currentVersion: string, candidateVersion: string): boolean {
+  const comparison = compareServiceVersions(currentVersion, candidateVersion);
+  return comparison !== null && comparison < 0;
+}
+
+function serviceRunnerReleaseIsUpdateCandidate(
+  currentVersion: string,
+  candidateVersion: string,
+): boolean {
+  return (
+    serviceRunnerReleaseChannel(currentVersion) === serviceRunnerReleaseChannel(candidateVersion) &&
+    serviceRunnerReleaseIsNewer(currentVersion, candidateVersion)
+  );
+}
+
+function compareServiceVersions(left: string, right: string): number | null {
+  const leftVersion = parseServiceVersion(left);
+  const rightVersion = parseServiceVersion(right);
+  if (leftVersion === null || rightVersion === null) {
+    return null;
+  }
+
+  const coreDifference =
+    leftVersion.major - rightVersion.major ||
+    leftVersion.minor - rightVersion.minor ||
+    leftVersion.patch - rightVersion.patch;
+  if (coreDifference !== 0) {
+    return coreDifference;
+  }
+
+  return comparePrereleaseVersions(leftVersion.prerelease, rightVersion.prerelease);
+}
+
+function parseServiceVersion(version: string): ParsedServiceVersion | null {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+.+)?$/.exec(
+    version.trim(),
+  );
+  if (match === null) {
+    return null;
+  }
+
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  const patch = Number(match[3]);
+  if (
+    !Number.isSafeInteger(major) ||
+    !Number.isSafeInteger(minor) ||
+    !Number.isSafeInteger(patch)
+  ) {
+    return null;
+  }
+
+  return {
+    major,
+    minor,
+    patch,
+    prerelease: match[4]?.split(".") ?? [],
+  };
+}
+
+function comparePrereleaseVersions(left: readonly string[], right: readonly string[]): number {
+  if (left.length === 0 && right.length === 0) {
+    return 0;
+  }
+  if (left.length === 0) {
+    return 1;
+  }
+  if (right.length === 0) {
+    return -1;
+  }
+
+  const length = Math.max(left.length, right.length);
+  for (let index = 0; index < length; index += 1) {
+    const leftPart = left[index];
+    const rightPart = right[index];
+    if (leftPart === undefined) {
+      return -1;
+    }
+    if (rightPart === undefined) {
+      return 1;
+    }
+
+    const difference = comparePrereleasePart(leftPart, rightPart);
+    if (difference !== 0) {
+      return difference;
+    }
+  }
+
+  return 0;
+}
+
+function comparePrereleasePart(left: string, right: string): number {
+  const leftNumber = numericPrereleasePart(left);
+  const rightNumber = numericPrereleasePart(right);
+  if (leftNumber !== null && rightNumber !== null) {
+    return leftNumber - rightNumber;
+  }
+  if (leftNumber !== null) {
+    return -1;
+  }
+  if (rightNumber !== null) {
+    return 1;
+  }
+
+  return left.localeCompare(right);
+}
+
+function numericPrereleasePart(part: string): number | null {
+  if (!/^(0|[1-9]\d*)$/.test(part)) {
+    return null;
+  }
+
+  const value = Number(part);
+  return Number.isSafeInteger(value) ? value : null;
 }
 
 function formatAutoUpdateError(cause: unknown): string {
@@ -3376,6 +3510,7 @@ function installServiceRunnerFromRegistryCandidates(
     fetchRunnerRelease?:
       | ((
           target: ServiceRunnerTarget,
+          versionSpecifier: string,
         ) => Effect.Effect<ServiceRunnerRelease | null, ServiceRunnerUpdateError>)
       | undefined;
     installRunnerRelease?:
@@ -3384,6 +3519,7 @@ function installServiceRunnerFromRegistryCandidates(
           paths: ServicePaths,
         ) => Effect.Effect<ServiceRunnerInstall, unknown>)
       | undefined;
+    runnerVersion?: string | undefined;
     updatePointer?: boolean | undefined;
   } = {},
 ): Effect.Effect<ServiceRunnerInstall, unknown> {
@@ -3404,7 +3540,8 @@ function installServiceRunnerFromRegistryCandidates(
       );
     }
 
-    const fetchRunnerRelease = options.fetchRunnerRelease ?? fetchLatestServiceRunnerRelease;
+    const runnerVersion = options.runnerVersion ?? packageJson.version;
+    const fetchRunnerRelease = options.fetchRunnerRelease ?? fetchServiceRunnerRelease;
     const installRunnerRelease =
       options.installRunnerRelease ??
       (options.updatePointer === false
@@ -3412,7 +3549,7 @@ function installServiceRunnerFromRegistryCandidates(
         : installServiceRunnerFromRegistry);
     const missingPackageNames: string[] = [];
     for (const target of targets) {
-      const release = yield* fetchRunnerRelease(target);
+      const release = yield* fetchRunnerRelease(target, runnerVersion);
       if (release === null) {
         missingPackageNames.push(serviceRunnerPackageName(target));
         continue;
@@ -4227,6 +4364,7 @@ export {
   renderSystemdTimer,
   refreshServiceAfterUpdate,
   installServiceRunner,
+  installServiceRunnerForRepair,
   installServiceRunnerFromOptionalPackage,
   installServiceRunnerFromRegistryCandidates,
   runServiceAutoUpdate,
@@ -4238,6 +4376,8 @@ export {
   serviceRepairReason,
   serviceRepairState,
   serviceRunnerPackageName,
+  serviceRunnerReleaseChannel,
+  serviceRunnerReleaseIsNewer,
   serviceRunnerTarget,
   serviceRunnerTargetCandidates,
   serviceScheduledSyncSince,

@@ -8,6 +8,7 @@ import { Cause, Effect, Layer } from "effect";
 import type { AuthUser } from "@tokenmaxxing/api-contract";
 import { describe, expect, it } from "vitest";
 
+import packageJson from "../../package.json";
 import {
   ApiClientService,
   BrowserService,
@@ -31,6 +32,7 @@ import {
   formatServiceLockStatus,
   formatServiceStatusAutoUpdate,
   installServiceRunner,
+  installServiceRunnerForRepair,
   installServiceRunnerFromOptionalPackage,
   isEphemeralCommandPath,
   isTransientCommandShimPath,
@@ -47,6 +49,8 @@ import {
   serviceRepairReason,
   serviceRepairState,
   serviceRunnerPackageName,
+  serviceRunnerReleaseChannel,
+  serviceRunnerReleaseIsNewer,
   serviceRunnerTarget,
   serviceScheduledSyncSince,
   serviceInstallProgram,
@@ -212,6 +216,27 @@ function makeTestLayer(options: TestLayerOptions) {
 
   return { layer, state };
 }
+
+describe("service runner update versions", () => {
+  it("derives the npm release channel from the current runner version", () => {
+    expect(serviceRunnerReleaseChannel("0.4.18")).toBe("latest");
+    expect(serviceRunnerReleaseChannel("v0.4.18")).toBe("latest");
+    expect(serviceRunnerReleaseChannel("0.4.18-alpha.1")).toBe("alpha");
+    expect(serviceRunnerReleaseChannel("0.4.18-beta.2")).toBe("beta");
+    expect(serviceRunnerReleaseChannel("0.4.18-rc.0+build")).toBe("rc");
+  });
+
+  it("only treats strictly newer semver-like runner versions as installable", () => {
+    expect(serviceRunnerReleaseIsNewer("0.4.18", "0.4.19")).toBe(true);
+    expect(serviceRunnerReleaseIsNewer("0.4.18", "0.5.0")).toBe(true);
+    expect(serviceRunnerReleaseIsNewer("0.4.18", "1.0.0")).toBe(true);
+    expect(serviceRunnerReleaseIsNewer("0.4.18", "0.4.18")).toBe(false);
+    expect(serviceRunnerReleaseIsNewer("0.4.18", "0.4.17")).toBe(false);
+    expect(serviceRunnerReleaseIsNewer("0.4.18-alpha.1", "0.4.18-alpha.2")).toBe(true);
+    expect(serviceRunnerReleaseIsNewer("0.4.18-alpha.2", "0.4.18-alpha.1")).toBe(false);
+    expect(serviceRunnerReleaseIsNewer("0.4.18-alpha.1", "0.4.18")).toBe(true);
+  });
+});
 
 function makeInstallRuntime(
   options: { env?: Record<string, string | undefined>; install?: CommandInstall } = {},
@@ -962,6 +987,107 @@ describe("service auto-update reports", () => {
     });
   });
 
+  it("fetches registry runner updates from the current release channel", async () => {
+    const paths = servicePaths({
+      env: { TOKENMAXXING_CONFIG_DIR: "/tmp/tokenmaxxing" },
+      home: "/Users/alex",
+      platform: "darwin",
+    })!;
+    const cases = [
+      { currentVersion: "0.4.12", nextVersion: "0.4.13", specifier: "latest" },
+      { currentVersion: "0.4.18-alpha.1", nextVersion: "0.4.18-alpha.2", specifier: "alpha" },
+      { currentVersion: "0.4.18-beta.1", nextVersion: "0.4.18-beta.2", specifier: "beta" },
+      { currentVersion: "0.4.18-rc.0", nextVersion: "0.4.18-rc.1", specifier: "rc" },
+    ];
+
+    for (const testCase of cases) {
+      const fetchedSpecifiers: string[] = [];
+
+      await expect(
+        runAutoUpdate(
+          registryMetadata,
+          {
+            fetchRunnerRelease: (_target, versionSpecifier) => {
+              fetchedSpecifiers.push(versionSpecifier);
+              return Effect.succeed(registryRelease(testCase.nextVersion));
+            },
+            installRunnerRelease: (release) =>
+              Effect.succeed({
+                packageName: release.packageName,
+                path: `/tmp/tokenmaxxing/service-runners/${release.version}/darwin-arm64/tokenmaxxing-service`,
+                target: release.target,
+                version: release.version,
+              }),
+            now,
+          },
+          testCase.currentVersion,
+          paths,
+        ),
+      ).resolves.toMatchObject({
+        installedVersion: testCase.nextVersion,
+        latestVersion: testCase.nextVersion,
+        manager: "registry",
+        reason: null,
+        status: "success",
+      });
+      expect(fetchedSpecifiers).toEqual([testCase.specifier]);
+    }
+  });
+
+  it("does not install an older registry runner candidate", async () => {
+    const paths = servicePaths({
+      env: { TOKENMAXXING_CONFIG_DIR: "/tmp/tokenmaxxing" },
+      home: "/Users/alex",
+      platform: "darwin",
+    });
+
+    await expect(
+      runAutoUpdate(
+        registryMetadata,
+        {
+          fetchRunnerRelease: () => Effect.succeed(registryRelease("0.4.18-alpha.1")),
+          installRunnerRelease: () => Effect.fail(new Error("should not install")),
+          now,
+        },
+        "0.4.18-alpha.2",
+        paths!,
+      ),
+    ).resolves.toMatchObject({
+      installedVersion: "0.4.18-alpha.2",
+      latestVersion: "0.4.18-alpha.1",
+      manager: "registry",
+      reason: null,
+      status: "not-needed",
+    });
+  });
+
+  it("does not install a registry runner candidate from a different release channel", async () => {
+    const paths = servicePaths({
+      env: { TOKENMAXXING_CONFIG_DIR: "/tmp/tokenmaxxing" },
+      home: "/Users/alex",
+      platform: "darwin",
+    });
+
+    await expect(
+      runAutoUpdate(
+        registryMetadata,
+        {
+          fetchRunnerRelease: () => Effect.succeed(registryRelease("0.4.18")),
+          installRunnerRelease: () => Effect.fail(new Error("should not install")),
+          now,
+        },
+        "0.4.18-alpha.1",
+        paths!,
+      ),
+    ).resolves.toMatchObject({
+      installedVersion: "0.4.18-alpha.1",
+      latestVersion: "0.4.18",
+      manager: "registry",
+      reason: null,
+      status: "not-needed",
+    });
+  });
+
   it("reports registry runner install failures without blocking sync", async () => {
     const paths = servicePaths({
       env: { TOKENMAXXING_CONFIG_DIR: "/tmp/tokenmaxxing" },
@@ -999,14 +1125,16 @@ describe("service auto-update reports", () => {
         platform: "darwin",
       })!;
       const fetchedTargets: string[] = [];
+      const fetchedSpecifiers: string[] = [];
       const installedTargets: string[] = [];
 
       await expect(
         runAutoUpdate(
           registryMetadata,
           {
-            fetchRunnerRelease: (target) => {
+            fetchRunnerRelease: (target, versionSpecifier) => {
               fetchedTargets.push(target);
+              fetchedSpecifiers.push(versionSpecifier);
               return Effect.succeed(
                 target === "darwin-x64-baseline"
                   ? {
@@ -1014,7 +1142,7 @@ describe("service auto-update reports", () => {
                       packageName: serviceRunnerPackageName(target),
                       tarballUrl: "https://registry.example/tokenmaxxing-service.tgz",
                       target,
-                      version: "0.4.13",
+                      version: "0.4.18-alpha.2",
                     }
                   : null,
               );
@@ -1023,7 +1151,7 @@ describe("service auto-update reports", () => {
               installedTargets.push(release.target);
               return Effect.succeed({
                 packageName: release.packageName,
-                path: "/tmp/tokenmaxxing/service-runners/0.4.13/darwin-x64-baseline/tokenmaxxing-service",
+                path: "/tmp/tokenmaxxing/service-runners/0.4.18-alpha.2/darwin-x64-baseline/tokenmaxxing-service",
                 target: release.target,
                 version: release.version,
               });
@@ -1031,17 +1159,18 @@ describe("service auto-update reports", () => {
             now,
             runnerTargetCandidates: () => ["darwin-x64", "darwin-x64-baseline"],
           },
-          "0.4.12",
+          "0.4.18-alpha.1",
           paths,
         ),
       ).resolves.toMatchObject({
-        installedVersion: "0.4.13",
-        latestVersion: "0.4.13",
+        installedVersion: "0.4.18-alpha.2",
+        latestVersion: "0.4.18-alpha.2",
         manager: "registry",
         reason: null,
         status: "success",
       });
       expect(fetchedTargets).toEqual(["darwin-x64", "darwin-x64-baseline"]);
+      expect(fetchedSpecifiers).toEqual(["alpha", "alpha"]);
       expect(installedTargets).toEqual(["darwin-x64-baseline"]);
     } finally {
       await rm(dir, { force: true, recursive: true });
@@ -1581,12 +1710,15 @@ describe("service runner installation", () => {
         target: "darwin-arm64" as const,
         version: "1.2.3",
       };
+      const fetchedSpecifiers: string[] = [];
 
       const installed = await Effect.runPromise(
         installServiceRunner(paths, {
           cpuArch: "arm64",
-          fetchRunnerRelease: (target) =>
-            Effect.succeed(target === "darwin-arm64" ? release : null),
+          fetchRunnerRelease: (target, versionSpecifier) => {
+            fetchedSpecifiers.push(versionSpecifier);
+            return Effect.succeed(target === "darwin-arm64" ? release : null);
+          },
           installRunnerRelease: (candidateRelease) =>
             Effect.succeed({
               packageName: candidateRelease.packageName,
@@ -1604,6 +1736,7 @@ describe("service runner installation", () => {
         target: "darwin-arm64",
         version: "1.2.3",
       });
+      expect(fetchedSpecifiers).toEqual([packageJson.version]);
     } finally {
       await rm(dir, { force: true, recursive: true });
     }
@@ -1619,13 +1752,15 @@ describe("service runner installation", () => {
         platform: "darwin",
       })!;
       const fetchedTargets: string[] = [];
+      const fetchedSpecifiers: string[] = [];
 
       const installed = await Effect.runPromise(
         installServiceRunner(paths, {
           avx2: true,
           cpuArch: "x64",
-          fetchRunnerRelease: (target) => {
+          fetchRunnerRelease: (target, versionSpecifier) => {
             fetchedTargets.push(target);
+            fetchedSpecifiers.push(versionSpecifier);
             return Effect.succeed(
               target === "darwin-x64-baseline"
                 ? {
@@ -1651,6 +1786,7 @@ describe("service runner installation", () => {
       );
 
       expect(fetchedTargets).toEqual(["darwin-x64", "darwin-x64-baseline"]);
+      expect(fetchedSpecifiers).toEqual([packageJson.version, packageJson.version]);
       expect(installed.target).toBe("darwin-x64-baseline");
 
       const exit = await Effect.runPromiseExit(
@@ -1662,6 +1798,68 @@ describe("service runner installation", () => {
         }),
       );
       expect(failureTag(exit)).toBe("ServiceRunnerPackageMissingError");
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
+  it("keeps an existing valid runner during repair before using registry fallback", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "tokenmaxxing-runner-repair-"));
+
+    try {
+      const paths = servicePaths({
+        env: { TOKENMAXXING_CONFIG_DIR: join(dir, "config") },
+        home: "/Users/alex",
+        platform: "darwin",
+      })!;
+      const existingRunnerPath = join(
+        paths.runnersDir,
+        "0.4.17",
+        "darwin-arm64",
+        "tokenmaxxing-service",
+      );
+      await mkdir(dirname(existingRunnerPath), { recursive: true });
+      await writeFile(existingRunnerPath, "#!/bin/sh\n");
+      await mkdir(dirname(paths.runnerPointerPath), { recursive: true });
+      await writeFile(paths.runnerPointerPath, `${existingRunnerPath}\n`);
+      await writeFile(
+        paths.metadataPath,
+        `${JSON.stringify({
+          autoUpdateManager: "registry",
+          backend: "launchd",
+          commandPath: existingRunnerPath,
+          installedAt: "2026-06-16T09:00:00.000Z",
+          runnerPackage: serviceRunnerPackageName("darwin-arm64"),
+          runnerPath: existingRunnerPath,
+          runnerTarget: "darwin-arm64",
+          runnerVersion: "0.4.17",
+          schedule: "syncs every 5 minutes",
+          templateVersion: 4,
+          version: 1,
+        })}\n`,
+      );
+
+      const installed = await Effect.runPromise(
+        installServiceRunnerForRepair(paths, {
+          cpuArch: "arm64",
+          fetchRunnerRelease: () =>
+            Effect.fail(
+              new ServiceRunnerUpdateError({
+                cause: "should not fetch registry",
+                reason: "download-failed",
+              }),
+            ),
+          platform: "darwin",
+          resolvePackageJson: () => null,
+        }),
+      );
+
+      expect(installed).toEqual({
+        packageName: serviceRunnerPackageName("darwin-arm64"),
+        path: existingRunnerPath,
+        target: "darwin-arm64",
+        version: "0.4.17",
+      });
     } finally {
       await rm(dir, { force: true, recursive: true });
     }
