@@ -5,6 +5,16 @@ All notable changes to tokenmaxxing are documented here. Versions are anchored t
 
 ## Unreleased
 
+## 0.4.15 - 2026-06-21
+
+### Added
+
+- Added structured auto-update telemetry for scheduled service check-ins so fleet status can show update-blocked devices with concrete reasons.
+
+### Changed
+
+- Made scheduled service auto-update verify the installed CLI version after package-manager updates before reporting success.
+
 ## 0.4.14 - 2026-06-21
 
 ### Added
