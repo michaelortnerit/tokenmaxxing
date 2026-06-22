@@ -18,7 +18,9 @@ interface StackedDay {
 
 type ValueFormatter = (value: number) => string;
 
-const HEIGHT = 220;
+const HEIGHT = 280;
+const TOP_PADDING = 14;
+const PLOT_HEIGHT = HEIGHT - TOP_PADDING;
 
 function StackedBars({
   ariaLabel,
@@ -34,7 +36,7 @@ function StackedBars({
   const [hovered, setHovered] = useState<number | null>(null);
 
   const max = useMemo(() => niceMax(Math.max(...days.map((day) => day.total), 0)), [days]);
-  const y = linearScale(max, HEIGHT);
+  const y = linearScale(max, PLOT_HEIGHT);
   const { barWidth, slot } = barLayout(days.length, 0.72, 16, 1.25);
 
   const monthStarts = useMemo(
