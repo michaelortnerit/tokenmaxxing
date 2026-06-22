@@ -3,8 +3,6 @@
 All notable changes to tokenmaxxing are documented here. Versions are anchored to the
 `cli-v*` release tags because the CLI is the project's current released artifact.
 
-## Unreleased
-
 ## 0.4.15 - 2026-06-21
 
 ### Added
