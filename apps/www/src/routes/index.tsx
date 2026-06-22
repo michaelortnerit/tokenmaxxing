@@ -258,12 +258,22 @@ function LeaderboardPage() {
             </div>
             <div className="flex gap-2">
               <Tabs
-                onChange={(value) => navigate({ search: (prev) => ({ ...prev, metric: value }) })}
+                onChange={(value) =>
+                  navigate({
+                    resetScroll: false,
+                    search: (prev) => ({ ...prev, metric: value }),
+                  })
+                }
                 options={METRICS}
                 value={metric}
               />
               <Tabs
-                onChange={(value) => navigate({ search: (prev) => ({ ...prev, window: value }) })}
+                onChange={(value) =>
+                  navigate({
+                    resetScroll: false,
+                    search: (prev) => ({ ...prev, window: value }),
+                  })
+                }
                 options={WINDOWS}
                 value={window}
               />
