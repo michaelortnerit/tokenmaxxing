@@ -9,7 +9,7 @@ import { z } from "zod";
 
 import { formatTokens, formatUsd } from "../components/charts/scale";
 import { Avatar } from "../components/ui/avatar";
-import { Code } from "../components/ui/code";
+import { Code, codeTextStyle } from "../components/ui/code";
 import { Tabs } from "../components/ui/tabs";
 import { cn } from "../lib/cn";
 import { faqPageSchema, softwareApplicationSchema } from "../lib/jsonld";
@@ -463,7 +463,10 @@ function HeroSection() {
             onClick={() => void copyBootstrapCommand()}
             type="button"
           >
-            <code className="min-w-0 overflow-x-auto whitespace-pre font-mono text-sm leading-6 text-muted-foreground">
+            <code
+              className="min-w-0 overflow-x-auto whitespace-pre font-mono text-sm leading-6 text-muted-foreground"
+              style={codeTextStyle}
+            >
               {selectedCommand.command}
             </code>
             <span className="mt-0.5 shrink-0 text-muted-foreground opacity-100 transition-opacity group-hover:text-foreground sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-visible:opacity-100">
