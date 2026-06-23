@@ -76,7 +76,7 @@ const BOOTSTRAP_COMMANDS = [
     value: "npm",
   },
   {
-    command: "bun add -g @851-labs/tokenmaxxing\ntokenmaxxing bootstrap",
+    command: "bun add -g --trust @851-labs/tokenmaxxing\ntokenmaxxing bootstrap",
     label: "bun",
     value: "bun",
   },

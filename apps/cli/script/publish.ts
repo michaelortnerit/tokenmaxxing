@@ -72,7 +72,11 @@ async function writeMainPackage(outDir: string): Promise<void> {
   await cp(join(repoDir, "LICENSE"), join(packageDir, "LICENSE"));
   await cp(join(cliDir, "README.md"), join(packageDir, "README.md"));
   await cp(join(cliDir, "script", "native-postinstall.mjs"), join(packageDir, "postinstall.mjs"));
-  await cp(join(cliDir, "script", "native-bin-stub.sh"), join(binDir, "tokenmaxxing.exe"));
+  await cp(
+    join(cliDir, "script", "native-bin-launcher.cjs"),
+    join(packageDir, "native-bin-launcher.cjs"),
+  );
+  await cp(join(cliDir, "script", "native-bin-launcher.cjs"), join(binDir, "tokenmaxxing.exe"));
   await chmod(join(binDir, "tokenmaxxing.exe"), 0o755);
   await Bun.write(
     join(packageDir, "package.json"),

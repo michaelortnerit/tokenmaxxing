@@ -28,8 +28,16 @@ describe("publish script generated main package", () => {
     const manifest = createMainPackageJson();
 
     expect(manifest.bin).toEqual({ tokenmaxxing: "./bin/tokenmaxxing.exe" });
-    expect(manifest.scripts).toEqual({ postinstall: "node ./postinstall.mjs" });
-    expect(manifest.files).toEqual(["bin", "postinstall.mjs", "README.md", "LICENSE"]);
+    expect(manifest.scripts).toEqual({
+      postinstall: "bun ./postinstall.mjs || node ./postinstall.mjs",
+    });
+    expect(manifest.files).toEqual([
+      "bin",
+      "native-bin-launcher.cjs",
+      "postinstall.mjs",
+      "README.md",
+      "LICENSE",
+    ]);
     expect(manifest.optionalDependencies).toHaveProperty("@851-labs/tokenmaxxing-darwin-arm64");
     expect(Object.keys(manifest.optionalDependencies)).not.toContain(
       "@851-labs/tokenmaxxing-service-darwin-arm64",

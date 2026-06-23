@@ -16,7 +16,7 @@ tokenmaxxing service install    # optional: sync automatically every 5 minutes
 tokenmaxxing upgrade            # upgrade the global CLI and refresh the service
 ```
 
-You can also install globally with `bun install -g`, `pnpm add -g`, or
+You can also install globally with `bun add -g --trust`, `pnpm add -g`, or
 `yarn global add`.
 
 The background service uses the global `tokenmaxxing` binary and syncs every

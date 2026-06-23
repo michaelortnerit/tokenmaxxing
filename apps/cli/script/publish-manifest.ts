@@ -13,9 +13,9 @@ function createMainPackageJson() {
       tokenmaxxing: "./bin/tokenmaxxing.exe",
     },
     scripts: {
-      postinstall: "node ./postinstall.mjs",
+      postinstall: "bun ./postinstall.mjs || node ./postinstall.mjs",
     },
-    files: ["bin", "postinstall.mjs", "README.md", "LICENSE"],
+    files: ["bin", "native-bin-launcher.cjs", "postinstall.mjs", "README.md", "LICENSE"],
     os: ["darwin", "linux", "win32"],
     cpu: ["arm64", "x64"],
     publishConfig: packageJson.publishConfig,
