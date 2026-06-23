@@ -52,11 +52,7 @@ function InternalPage() {
         </div>
       </header>
       <dl className="grid gap-px border-y border-border bg-border text-sm sm:grid-cols-3">
-        <SummaryCell
-          detail={latestCliVersionsDetail(data.latestCliVersions)}
-          label="Latest CLI"
-          value={formatVersion(data.latestCliVersion)}
-        />
+        <SummaryCell label="Latest CLI" value={formatVersion(data.latestCliVersion)} />
         <SummaryCell label="Users" value={formatInteger(data.summary.totalUsers)} />
         <SummaryCell label="Devices" value={formatInteger(data.summary.totalDevices)} />
       </dl>
@@ -197,19 +193,6 @@ function StatusCell({ row, title }: { row: AdminUsersData["devices"][number]; ti
       ) : null}
     </div>
   );
-}
-
-function latestCliVersionsDetail(
-  versions: AdminUsersData["latestCliVersions"],
-): string | undefined {
-  const detail = (["alpha", "beta", "rc"] as const)
-    .flatMap((channel) => {
-      const version = versions[channel];
-      return version === null ? [] : [`${channel} ${formatVersion(version)}`];
-    })
-    .join(" · ");
-
-  return detail.length === 0 ? undefined : detail;
 }
 
 function fleetSummary(data: AdminUsersData): string {
