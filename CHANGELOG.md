@@ -5,6 +5,18 @@ All notable changes to tokenmaxxing are documented here. Versions are anchored t
 
 ## Unreleased
 
+## 0.4.19 - 2026-06-23
+
+### Changed
+
+- Made generated npm installs run native postinstall through Bun when available, with Node as a fallback.
+- Updated Bun install guidance to use `bun add -g --trust @851-labs/tokenmaxxing`.
+
+### Fixed
+
+- Made the npm-installed CLI fall back to the installed native optional package when lifecycle scripts are blocked.
+- Improved failed native install diagnostics for script-blocked and shadowed global installs.
+
 ## 0.4.18 - 2026-06-22
 
 ### Added
