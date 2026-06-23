@@ -28,12 +28,12 @@ function rootHead() {
       { title: "tokenmaxxing.sh" },
       {
         name: "description",
-        content: "The social leaderboard for LLM token usage. Sync your agents, climb the ranks.",
+        content: "The best place to track token usage.",
       },
       { property: "og:title", content: "tokenmaxxing.sh" },
       {
         property: "og:description",
-        content: "The social leaderboard for LLM token usage. Sync your agents, climb the ranks.",
+        content: "The best place to track token usage.",
       },
       { property: "og:type", content: "website" },
       { property: "og:url", content: SITE_ORIGIN },

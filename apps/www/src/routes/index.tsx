@@ -423,10 +423,10 @@ function HeroSection() {
   return (
     <section className="border-b border-border px-4 py-10 sm:py-14" aria-labelledby="hero-title">
       <h1 className="max-w-3xl text-2xl font-semibold tracking-tight" id="hero-title">
-        The best place to track your token usage
+        The best place to track token usage
       </h1>
       <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-        Sync local agent usage, publish your profile, and climb the leaderboard.
+        A local CLI, built on ccusage, that syncs your token usage with everyone else.
       </p>
       <div className="mt-6 max-w-3xl">
         <div className="overflow-hidden border border-border bg-muted/40">

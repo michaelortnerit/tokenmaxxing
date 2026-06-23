@@ -33,7 +33,7 @@ function webSiteSchema(): Record<string, unknown> {
     "@id": WEBSITE_ID,
     name: SITE_NAME,
     url: SITE_ORIGIN,
-    description: "The social leaderboard for LLM token usage. Sync your agents, climb the ranks.",
+    description: "The best place to track token usage.",
     publisher: { "@id": ORGANIZATION_ID },
   };
 }
