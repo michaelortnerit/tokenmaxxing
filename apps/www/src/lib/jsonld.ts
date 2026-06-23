@@ -50,7 +50,7 @@ function softwareApplicationSchema(): Record<string, unknown> {
     url: SITE_ORIGIN,
     downloadUrl: "https://www.npmjs.com/package/@851-labs/tokenmaxxing",
     installUrl: "https://www.npmjs.com/package/@851-labs/tokenmaxxing",
-    softwareHelp: { "@type": "CreativeWork", text: "npm install -g @851-labs/tokenmaxxing" },
+    softwareHelp: { "@type": "CreativeWork", text: "npm install -g @851-labs/tokenmaxxing@latest" },
     publisher: { "@id": ORGANIZATION_ID },
     offers: {
       "@type": "Offer",

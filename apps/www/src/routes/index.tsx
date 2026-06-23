@@ -71,17 +71,17 @@ const METRICS: { label: string; value: typeof LeaderboardMetric.Type }[] = [
 
 const BOOTSTRAP_COMMANDS = [
   {
-    command: "npm install -g @851-labs/tokenmaxxing\ntokenmaxxing bootstrap",
+    command: "npm install -g @851-labs/tokenmaxxing@latest\ntokenmaxxing bootstrap",
     label: "npm",
     value: "npm",
   },
   {
-    command: "bun add -g --trust @851-labs/tokenmaxxing\ntokenmaxxing bootstrap",
+    command: "bun add -g --trust @851-labs/tokenmaxxing@latest\ntokenmaxxing bootstrap",
     label: "bun",
     value: "bun",
   },
   {
-    command: "pnpm add -g @851-labs/tokenmaxxing\ntokenmaxxing bootstrap",
+    command: "pnpm add -g @851-labs/tokenmaxxing@latest\ntokenmaxxing bootstrap",
     label: "pnpm",
     value: "pnpm",
   },
@@ -111,7 +111,7 @@ const FAQ_ITEMS: { answer: ReactNode; answerText: string; question: string }[] =
       <>
         Install the CLI, then run the bootstrap command.
         <span className="mt-3 block">
-          <Code>npm install -g @851-labs/tokenmaxxing</Code>
+          <Code>npm install -g @851-labs/tokenmaxxing@latest</Code>
         </span>
         <span className="mt-2 block">
           <Code>tokenmaxxing bootstrap</Code>
@@ -122,7 +122,7 @@ const FAQ_ITEMS: { answer: ReactNode; answerText: string; question: string }[] =
       </>
     ),
     answerText:
-      "Install the CLI, then run the bootstrap command. Run `npm install -g @851-labs/tokenmaxxing`, then `tokenmaxxing bootstrap`. Bootstrap signs you in, syncs your usage, and can set up automatic syncing.",
+      "Install the CLI, then run the bootstrap command. Run `npm install -g @851-labs/tokenmaxxing@latest`, then `tokenmaxxing bootstrap`. Bootstrap signs you in, syncs your usage, and can set up automatic syncing.",
   },
   {
     question: "Which agents does it support?",

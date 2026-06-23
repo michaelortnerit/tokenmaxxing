@@ -234,7 +234,7 @@ function DesignPage() {
 
       <Section title="Code">
         <p className="text-sm text-muted-foreground">
-          Run <Code>npm install -g @851-labs/tokenmaxxing</Code> to install.
+          Run <Code>npm install -g @851-labs/tokenmaxxing@latest</Code> to install.
         </p>
       </Section>
 

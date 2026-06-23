@@ -16,7 +16,7 @@ const LLMS_TXT = `# tokenmaxxing.sh
 Install the CLI, then run the bootstrap command. Bootstrap signs you in, syncs your usage, and can set up automatic syncing.
 
 \`\`\`
-npm install -g @851-labs/tokenmaxxing
+npm install -g @851-labs/tokenmaxxing@latest
 tokenmaxxing bootstrap
 \`\`\`
 
