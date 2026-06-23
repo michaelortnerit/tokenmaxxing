@@ -3648,6 +3648,11 @@ function resolveExecutableSiblingPackageJson(
       continue;
     }
 
+    const nestedCandidate = nestedPackageJsonPath(packageDir, packageName);
+    if (nestedCandidate !== null && existsSync(nestedCandidate)) {
+      return nestedCandidate;
+    }
+
     const candidate = siblingPackageJsonPath(packageDir, packageName);
     if (candidate !== null && existsSync(candidate)) {
       return candidate;
@@ -3661,6 +3666,19 @@ function packageDirFromBinPath(binaryPath: string): string | null {
   const resolvedPath = realpathSyncOrOriginal(binaryPath);
   const binDir = dirname(resolvedPath);
   return basename(binDir) === "bin" ? dirname(binDir) : null;
+}
+
+function nestedPackageJsonPath(packageDir: string, packageName: string): string | null {
+  const parts = packageName.split("/");
+  if (parts.length === 1) {
+    return join(packageDir, "node_modules", packageName, "package.json");
+  }
+
+  if (parts.length === 2 && parts[0]?.startsWith("@")) {
+    return join(packageDir, "node_modules", parts[0], parts[1]!, "package.json");
+  }
+
+  return null;
 }
 
 function realpathSyncOrOriginal(path: string): string {

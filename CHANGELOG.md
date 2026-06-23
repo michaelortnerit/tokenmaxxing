@@ -5,6 +5,12 @@ All notable changes to tokenmaxxing are documented here. Versions are anchored t
 
 ## Unreleased
 
+## 0.4.18-alpha.5 - 2026-06-22
+
+### Fixed
+
+- Fixed service repair for native npm installs so it copies the nested platform package runner instead of keeping an older config-owned runner.
+
 ## 0.4.18-alpha.4 - 2026-06-22
 
 ### Changed

@@ -1662,6 +1662,51 @@ describe("service runner installation", () => {
     }
   });
 
+  it("copies a nested optional native package from a native main package install", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "tokenmaxxing-runner-install-"));
+
+    try {
+      const paths = servicePaths({
+        env: { TOKENMAXXING_CONFIG_DIR: join(dir, "config") },
+        home: "/Users/alex",
+        platform: "darwin",
+      })!;
+      const mainPackageDir = join(dir, "global", "@851-labs", "tokenmaxxing");
+      const mainBinaryPath = join(mainPackageDir, "bin", "tokenmaxxing.exe");
+      await mkdir(dirname(mainBinaryPath), { recursive: true });
+      await writeFile(mainBinaryPath, "#!/bin/sh\n");
+      await chmod(mainBinaryPath, 0o755);
+
+      const packageName = serviceRunnerPackageName("darwin-arm64");
+      const packageJsonPath = await writeFakeRunnerPackage(
+        join(mainPackageDir, "node_modules"),
+        packageName,
+        "tokenmaxxing",
+      );
+
+      await expect(
+        realpath(resolveExecutableSiblingPackageJson(packageName, [mainBinaryPath])!),
+      ).resolves.toBe(await realpath(packageJsonPath));
+
+      const installed = await Effect.runPromise(
+        installServiceRunnerFromOptionalPackage(paths, {
+          cpuArch: "arm64",
+          platform: "darwin",
+          resolvePackageJson: (name) => resolveExecutableSiblingPackageJson(name, [mainBinaryPath]),
+        }),
+      );
+
+      expect(installed).toMatchObject({
+        packageName,
+        target: "darwin-arm64",
+        version: "9.9.9",
+      });
+      await expect(readFile(installed.path, "utf8")).resolves.toBe("#!/bin/sh\n");
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
   it("falls back when the preferred optional package is absent but a candidate package exists", async () => {
     const dir = await mkdtemp(join(tmpdir(), "tokenmaxxing-runner-install-"));
 
