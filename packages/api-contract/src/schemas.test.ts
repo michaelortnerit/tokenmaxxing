@@ -217,6 +217,12 @@ describe("admin fleet responses", () => {
       generatedAt: "2026-06-19T20:00:00.000Z",
       latestCliPublishedAt: "2026-06-19T19:00:00.000Z",
       latestCliVersion: "0.5.4",
+      latestCliVersions: {
+        alpha: "0.5.5-alpha.1",
+        beta: null,
+        latest: "0.5.4",
+        rc: null,
+      },
       rolloutGraceHours: 2,
       staleThresholdHours: 6,
       summary: {

@@ -444,11 +444,19 @@ const AdminUserDebugRow = Schema.Struct({
 
 type AdminUserDebugRow = typeof AdminUserDebugRow.Type;
 
+const AdminLatestCliVersions = Schema.Struct({
+  alpha: Schema.NullOr(Schema.String),
+  beta: Schema.NullOr(Schema.String),
+  latest: Schema.NullOr(Schema.String),
+  rc: Schema.NullOr(Schema.String),
+});
+
 const AdminUsersResponse = Schema.Struct({
   devices: Schema.Array(AdminDeviceDebugRow),
   generatedAt: Schema.String,
   latestCliPublishedAt: Schema.NullOr(Schema.String),
   latestCliVersion: Schema.NullOr(Schema.String),
+  latestCliVersions: AdminLatestCliVersions,
   rolloutGraceHours: Schema.Number,
   staleThresholdHours: Schema.Number,
   summary: Schema.Struct({

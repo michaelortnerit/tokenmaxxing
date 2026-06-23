@@ -24,10 +24,21 @@ const STALE_THRESHOLD_MS = 6 * 60 * 60 * 1000;
 const ROLLOUT_GRACE_MS = 2 * 60 * 60 * 1000;
 const NPM_PACKAGE_URL = "https://registry.npmjs.org/@851-labs%2Ftokenmaxxing";
 const LATEST_VERSION_CACHE_MS = 5 * 60 * 1000;
+const RELEASE_CHANNELS = ["latest", "alpha", "beta", "rc"] as const;
+
+type ReleaseChannel = (typeof RELEASE_CHANNELS)[number];
+
+interface LatestCliVersions {
+  alpha: string | null;
+  beta: string | null;
+  latest: string | null;
+  rc: string | null;
+}
 
 interface LatestCliRelease {
   publishedAt: string | null;
   version: string | null;
+  versions: LatestCliVersions;
 }
 
 interface AdminAccountSnapshot {
@@ -160,6 +171,7 @@ function makeAdminService(options: AdminServiceOptions = {}) {
           generatedAt: generatedAt.toISOString(),
           latestCliPublishedAt: latestCliRelease.publishedAt,
           latestCliVersion: latestCliRelease.version,
+          latestCliVersions: latestCliRelease.versions,
           rolloutGraceHours: ROLLOUT_GRACE_MS / (60 * 60 * 1000),
           staleThresholdHours: STALE_THRESHOLD_MS / (60 * 60 * 1000),
           summary: adminSummary(devices, snapshots.length),
@@ -255,13 +267,13 @@ function adminDeviceDebugRow(
   const tokens = snapshot.tokens.filter((token) => token.deviceId === device.id);
   const activeTokenCount = tokens.filter((token) => token.revokedAt === null).length;
   const usage = snapshot.deviceUsage.find((row) => row.deviceId === device.id);
-  const updateStatus = adminDeviceUpdateStatus(device, latestCliRelease.version);
+  const updateStatus = adminDeviceUpdateStatus(device, latestCliRelease);
 
   return {
     activeDays: usage?.activeDays ?? 0,
     activeTokenCount,
     device,
-    isOutdated: deviceVersionIsOutdated(device, latestCliRelease.version),
+    isOutdated: deviceVersionIsOutdated(device, latestCliRelease),
     lastTokenUsedAt: maxIso(tokens.map((token) => token.lastUsedAt)),
     lastUsageDate: usage?.lastUsageDate ?? null,
     latestCheckInAt: latestDeviceCheckIn(device),
@@ -384,8 +396,9 @@ function compareDeviceDebugRows(
 
 function deviceVersionIsOutdated(
   device: { version: string | null } | null,
-  latestVersion: string | null,
+  latestCliRelease: LatestCliRelease,
 ): boolean {
+  const latestVersion = latestVersionForDevice(device, latestCliRelease);
   if (device === null || device.version === null || latestVersion === null) {
     return false;
   }
@@ -395,13 +408,14 @@ function deviceVersionIsOutdated(
 
 function adminDeviceUpdateStatus(
   device: AdminDeviceSnapshot | null,
-  latestVersion: string | null,
+  latestCliRelease: LatestCliRelease,
 ): AdminDeviceUpdateStatus {
+  const latestVersion = latestVersionForDevice(device, latestCliRelease);
   if (device === null || device.version === null || latestVersion === null) {
     return "unknown";
   }
 
-  if (!deviceVersionIsOutdated(device, latestVersion)) {
+  if (!deviceVersionIsOutdated(device, latestCliRelease)) {
     return "current";
   }
 
@@ -409,6 +423,18 @@ function adminDeviceUpdateStatus(
     device.serviceAutoUpdateStatus === "skipped"
     ? "update-blocked"
     : "outdated";
+}
+
+function latestVersionForDevice(
+  device: { version: string | null } | null,
+  latestCliRelease: LatestCliRelease,
+): string | null {
+  if (device === null || device.version === null) {
+    return null;
+  }
+
+  const channel = releaseChannelForVersion(device.version);
+  return channel === null ? null : latestCliRelease.versions[channel];
 }
 
 function adminDeviceUpdateBlockedReason(device: AdminDeviceSnapshot): string | null {
@@ -476,7 +502,25 @@ function adminDeviceRepairReason(
 }
 
 function normalizeVersion(version: string): string {
-  return version.trim().replace(/^v/i, "");
+  return version.trim().replace(/^v/i, "").replace(/\+.*/, "");
+}
+
+function releaseChannelForVersion(version: string): ReleaseChannel | null {
+  const match = /^\d+\.\d+\.\d+(?:-([0-9A-Za-z]+)(?:[.-].*)?)?$/.exec(normalizeVersion(version));
+  if (match === null) {
+    return null;
+  }
+
+  const prerelease = match[1];
+  if (prerelease === undefined) {
+    return "latest";
+  }
+
+  return isReleaseChannel(prerelease) && prerelease !== "latest" ? prerelease : null;
+}
+
+function isReleaseChannel(value: string): value is ReleaseChannel {
+  return (RELEASE_CHANNELS as readonly string[]).includes(value);
 }
 
 let latestReleaseCache: { expiresAt: number; value: LatestCliRelease } | null = null;
@@ -513,7 +557,7 @@ function defaultFetchLatestCliRelease(): Effect.Effect<LatestCliRelease> {
 }
 
 function noLatestCliRelease(): LatestCliRelease {
-  return { publishedAt: null, version: null };
+  return { publishedAt: null, version: null, versions: emptyLatestCliVersions() };
 }
 
 function latestReleaseFromRegistryBody(body: unknown): LatestCliRelease {
@@ -523,29 +567,48 @@ function latestReleaseFromRegistryBody(body: unknown): LatestCliRelease {
 
   const directVersion = (body as { version?: unknown }).version;
   const distTags = (body as { "dist-tags"?: unknown })["dist-tags"];
-  const taggedVersion =
-    distTags !== null && typeof distTags === "object"
-      ? (distTags as { latest?: unknown }).latest
-      : undefined;
-  const version =
-    typeof taggedVersion === "string" && taggedVersion.length > 0
-      ? taggedVersion
-      : typeof directVersion === "string" && directVersion.length > 0
-        ? directVersion
-        : null;
-  if (version === null) {
+  const versions = latestCliVersionsFromDistTags(distTags);
+  const latest =
+    versions.latest ??
+    (typeof directVersion === "string" && directVersion.length > 0 ? directVersion : null);
+  if (latest === null) {
     return noLatestCliRelease();
   }
 
   const times = (body as { time?: unknown }).time;
   const publishedAt =
     times !== null && typeof times === "object"
-      ? (times as Record<string, unknown>)[version]
+      ? (times as Record<string, unknown>)[latest]
       : undefined;
 
   return {
     publishedAt: typeof publishedAt === "string" && publishedAt.length > 0 ? publishedAt : null,
-    version,
+    version: latest,
+    versions: { ...versions, latest },
+  };
+}
+
+function latestCliVersionsFromDistTags(distTags: unknown): LatestCliVersions {
+  const versions = emptyLatestCliVersions();
+  if (distTags === null || typeof distTags !== "object") {
+    return versions;
+  }
+
+  const tags = distTags as Record<string, unknown>;
+  for (const channel of RELEASE_CHANNELS) {
+    const value = tags[channel];
+    versions[channel] = typeof value === "string" && value.length > 0 ? value : null;
+  }
+
+  return versions;
+}
+
+function emptyLatestCliVersions(): LatestCliVersions {
+  return {
+    alpha: null,
+    beta: null,
+    latest: null,
+    rc: null,
   };
 }
 

@@ -19,6 +19,12 @@ const now = new Date("2026-06-19T20:00:00.000Z");
 const latestRelease: LatestCliRelease = {
   publishedAt: "2026-06-19T19:00:00.000Z",
   version: "0.5.4",
+  versions: {
+    alpha: "0.5.5-alpha.1",
+    beta: null,
+    latest: "0.5.4",
+    rc: null,
+  },
 };
 
 interface TestAdminService {
@@ -118,10 +124,13 @@ function makeRepository(options: {
   };
 }
 
-async function makeService(repository: AdminRepositoryShape) {
+async function makeService(
+  repository: AdminRepositoryShape,
+  options: { latestCliRelease?: LatestCliRelease | undefined } = {},
+) {
   return (await Effect.runPromise(
     makeAdminService({
-      fetchLatestCliRelease: () => Effect.succeed(latestRelease),
+      fetchLatestCliRelease: () => Effect.succeed(options.latestCliRelease ?? latestRelease),
       now: () => now,
     }).pipe(Effect.provideService(AdminRepository, repository)),
   )) as unknown as TestAdminService;
@@ -152,6 +161,13 @@ describe("AdminService.listUsers", () => {
       unknown: 0,
     });
     expect(response.latestCliPublishedAt).toBe("2026-06-19T19:00:00.000Z");
+    expect(response.latestCliVersion).toBe("0.5.4");
+    expect(response.latestCliVersions).toEqual({
+      alpha: "0.5.5-alpha.1",
+      beta: null,
+      latest: "0.5.4",
+      rc: null,
+    });
     expect(response.rolloutGraceHours).toBe(2);
     expect(response.devices[0]).toMatchObject({
       activeDays: 12,
@@ -232,6 +248,119 @@ describe("AdminService.listUsers", () => {
       "stale",
     ]);
     expect(response.devices.every((deviceRow) => deviceRow.isOutdated)).toBe(true);
+  });
+
+  it("does not mark a current alpha client outdated against stable latest", async () => {
+    const service = await makeService(
+      makeRepository({
+        allowedEmails: ["alexandru@851.sh"],
+        snapshots: [snapshot({ devices: [device({ version: "0.5.5-alpha.1" })] })],
+      }),
+    );
+
+    const response = await Effect.runPromise(service.listUsers("user_123"));
+
+    expect(response.summary).toMatchObject({
+      outdated: 0,
+      updateBlocked: 0,
+    });
+    expect(response.devices[0]).toMatchObject({
+      isOutdated: false,
+      updateBlockedReason: null,
+      updateStatus: "current",
+    });
+  });
+
+  it("marks an alpha client outdated only against the alpha dist-tag", async () => {
+    const service = await makeService(
+      makeRepository({
+        allowedEmails: ["alexandru@851.sh"],
+        snapshots: [snapshot({ devices: [device({ version: "0.5.5-alpha.0" })] })],
+      }),
+    );
+
+    const response = await Effect.runPromise(service.listUsers("user_123"));
+
+    expect(response.summary).toMatchObject({
+      outdated: 1,
+      updateBlocked: 0,
+    });
+    expect(response.devices[0]).toMatchObject({
+      isOutdated: true,
+      updateStatus: "outdated",
+    });
+  });
+
+  it("treats alpha update status as unknown when npm has no alpha dist-tag", async () => {
+    const service = await makeService(
+      makeRepository({
+        allowedEmails: ["alexandru@851.sh"],
+        snapshots: [snapshot({ devices: [device({ version: "0.5.5-alpha.0" })] })],
+      }),
+      {
+        latestCliRelease: {
+          ...latestRelease,
+          versions: { ...latestRelease.versions, alpha: null },
+        },
+      },
+    );
+
+    const response = await Effect.runPromise(service.listUsers("user_123"));
+
+    expect(response.summary).toMatchObject({
+      outdated: 0,
+      updateBlocked: 0,
+    });
+    expect(response.devices[0]).toMatchObject({
+      isOutdated: false,
+      updateBlockedReason: null,
+      updateStatus: "unknown",
+    });
+  });
+
+  it("only marks update-blocked when the device is outdated on its own channel", async () => {
+    const service = await makeService(
+      makeRepository({
+        allowedEmails: ["alexandru@851.sh"],
+        snapshots: [
+          snapshot({
+            devices: [
+              device({
+                id: "current-alpha",
+                serviceAutoUpdateReason: "download-failed",
+                serviceAutoUpdateStatus: "failure",
+                version: "0.5.5-alpha.1",
+              }),
+              device({
+                id: "old-alpha",
+                serviceAutoUpdateReason: "download-failed",
+                serviceAutoUpdateStatus: "failure",
+                version: "0.5.5-alpha.0",
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+
+    const response = await Effect.runPromise(service.listUsers("user_123"));
+    const currentAlpha = response.devices.find((row) => row.device.id === "current-alpha");
+    const oldAlpha = response.devices.find((row) => row.device.id === "old-alpha");
+
+    expect(response.summary).toMatchObject({
+      outdated: 1,
+      updateBlocked: 1,
+    });
+    expect(currentAlpha).toMatchObject({
+      isOutdated: false,
+      updateBlockedReason: null,
+      updateStatus: "current",
+    });
+    expect(oldAlpha).toMatchObject({
+      isOutdated: true,
+      updateBlockedReason: "download-failed",
+      updateStatus: "update-blocked",
+    });
   });
 
   it("keeps multiple devices for one user visible as separate fleet rows", async () => {
@@ -432,7 +561,7 @@ describe("adminDeviceStatus", () => {
     expect(
       adminDeviceStatus(
         device({ version: "0.5.3" }),
-        { publishedAt: "2026-06-19T17:59:59.000Z", version: "0.5.4" },
+        { ...latestRelease, publishedAt: "2026-06-19T17:59:59.000Z" },
         now,
       ),
     ).toBe("healthy");
@@ -488,9 +617,21 @@ describe("latestReleaseFromRegistryBody", () => {
   it("reads the latest dist tag and release timestamp from npm package metadata", () => {
     expect(
       latestReleaseFromRegistryBody({
-        "dist-tags": { latest: "0.5.4" },
+        "dist-tags": {
+          alpha: "0.5.5-alpha.1",
+          beta: "0.5.5-beta.1",
+          latest: "0.5.4",
+          rc: "0.5.5-rc.1",
+        },
         time: { "0.5.4": "2026-06-19T19:00:00.000Z" },
       }),
-    ).toEqual(latestRelease);
+    ).toEqual({
+      ...latestRelease,
+      versions: {
+        ...latestRelease.versions,
+        beta: "0.5.5-beta.1",
+        rc: "0.5.5-rc.1",
+      },
+    });
   });
 });
