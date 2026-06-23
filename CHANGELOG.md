@@ -5,6 +5,12 @@ All notable changes to tokenmaxxing are documented here. Versions are anchored t
 
 ## Unreleased
 
+## 0.4.18-alpha.3 - 2026-06-22
+
+### Changed
+
+- Reissued the service-runner alpha to validate channel-aware runner updates end to end before the stable release.
+
 ## 0.4.18-alpha.2 - 2026-06-22
 
 ### Fixed
