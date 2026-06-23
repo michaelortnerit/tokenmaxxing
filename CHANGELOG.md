@@ -5,6 +5,13 @@ All notable changes to tokenmaxxing are documented here. Versions are anchored t
 
 ## Unreleased
 
+## 0.4.18-alpha.4 - 2026-06-22
+
+### Changed
+
+- Changed npm installs to materialize a native `tokenmaxxing` binary from generated `@851-labs/tokenmaxxing-<target>` packages.
+- Renamed generated native packages away from the alpha-only `@851-labs/tokenmaxxing-service-<target>` package family.
+
 ## 0.4.18-alpha.3 - 2026-06-22
 
 ### Changed
