@@ -5,6 +5,12 @@ All notable changes to tokenmaxxing are documented here. Versions are anchored t
 
 ## Unreleased
 
+## 0.4.20 - 2026-06-27
+
+### Fixed
+
+- Fixed Windows npm installs so generated command shims launch the native CLI executable instead of asking Node to parse it.
+
 ## 0.4.19 - 2026-06-23
 
 ### Changed
