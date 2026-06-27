@@ -28,13 +28,16 @@ describe("publish script generated main package", () => {
     const manifest = createMainPackageJson();
 
     expect(manifest.bin).toEqual({ tokenmaxxing: "./bin/tokenmaxxing.exe" });
+    // npm links Windows shims after preinstall and before postinstall; using
+    // postinstall here makes those shims run Node against the final native exe.
     expect(manifest.scripts).toEqual({
-      postinstall: "bun ./postinstall.mjs || node ./postinstall.mjs",
+      preinstall: "bun ./install-native.mjs || node ./install-native.mjs",
     });
+    expect(manifest.scripts).not.toHaveProperty("postinstall");
     expect(manifest.files).toEqual([
       "bin",
       "native-bin-launcher.cjs",
-      "postinstall.mjs",
+      "install-native.mjs",
       "README.md",
       "LICENSE",
     ]);

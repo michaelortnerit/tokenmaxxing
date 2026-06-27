@@ -12,10 +12,12 @@ function createMainPackageJson() {
     bin: {
       tokenmaxxing: "./bin/tokenmaxxing.exe",
     },
+    // npm links Windows shims after preinstall and before postinstall. Keep
+    // native installation here so shims see the final .exe instead of Node JS.
     scripts: {
-      postinstall: "bun ./postinstall.mjs || node ./postinstall.mjs",
+      preinstall: "bun ./install-native.mjs || node ./install-native.mjs",
     },
-    files: ["bin", "native-bin-launcher.cjs", "postinstall.mjs", "README.md", "LICENSE"],
+    files: ["bin", "native-bin-launcher.cjs", "install-native.mjs", "README.md", "LICENSE"],
     os: ["darwin", "linux", "win32"],
     cpu: ["arm64", "x64"],
     publishConfig: packageJson.publishConfig,

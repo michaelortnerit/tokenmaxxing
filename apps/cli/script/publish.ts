@@ -71,7 +71,7 @@ async function writeMainPackage(outDir: string): Promise<void> {
   await mkdir(binDir, { recursive: true });
   await cp(join(repoDir, "LICENSE"), join(packageDir, "LICENSE"));
   await cp(join(cliDir, "README.md"), join(packageDir, "README.md"));
-  await cp(join(cliDir, "script", "native-postinstall.mjs"), join(packageDir, "postinstall.mjs"));
+  await cp(join(cliDir, "script", "install-native.mjs"), join(packageDir, "install-native.mjs"));
   await cp(
     join(cliDir, "script", "native-bin-launcher.cjs"),
     join(packageDir, "native-bin-launcher.cjs"),

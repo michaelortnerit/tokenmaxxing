@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { binaryName, nativePackageNames } from "./native-postinstall.mjs";
+import { binaryName, nativePackageNames } from "./install-native.mjs";
 import launcher from "./native-bin-launcher.cjs";
 import {
   serviceRunnerPackageName,
@@ -12,7 +12,7 @@ import {
 
 const { findNativeBinary, recoveryMessage } = launcher;
 
-describe("native postinstall package selection", () => {
+describe("native preinstall package selection", () => {
   it("matches service runner candidate ordering", () => {
     for (const options of [
       { arch: "x64", avx2: true, musl: false, platform: "linux" },
