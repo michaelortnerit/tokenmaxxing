@@ -5,6 +5,12 @@ All notable changes to tokenmaxxing are documented here. Versions are anchored t
 
 ## Unreleased
 
+## 0.4.21 - 2026-06-27
+
+### Fixed
+
+- Fixed Windows native CLI executables exiting without output by using Bun's native entrypoint signal.
+
 ## 0.4.20 - 2026-06-27
 
 ### Fixed
