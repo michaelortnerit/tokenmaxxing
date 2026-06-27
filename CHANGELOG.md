@@ -5,6 +5,12 @@ All notable changes to tokenmaxxing are documented here. Versions are anchored t
 
 ## Unreleased
 
+## 0.4.22 - 2026-06-27
+
+### Fixed
+
+- Fixed Windows native CLI startup by removing the module guard and accepting standalone executable argv shape.
+
 ## 0.4.21 - 2026-06-27
 
 ### Fixed
