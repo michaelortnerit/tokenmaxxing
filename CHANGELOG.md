@@ -5,6 +5,14 @@ All notable changes to tokenmaxxing are documented here. Versions are anchored t
 
 ## Unreleased
 
+## 0.4.23 - 2026-07-14
+
+### Added
+
+- Added GPT-5.6 tier tracking by using a ccusage release with GPT-5.6 pricing support.
+- Added aggregate public stats for tracked spend, tokens, models, sources, users, and devices.
+- Added internal shadow-ban moderation controls to remove selected accounts from public surfaces.
+
 ## 0.4.22 - 2026-06-27
 
 ### Fixed
