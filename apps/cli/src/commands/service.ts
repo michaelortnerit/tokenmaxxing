@@ -58,12 +58,13 @@ const gunzipPromise = promisify(gunzip);
 const require = createRequire(import.meta.url);
 
 const SERVICE_LABEL = "sh.tokenmaxxing.sync";
-const SERVICE_TEMPLATE_VERSION = 5;
+const SERVICE_TEMPLATE_VERSION = 6;
 const SYSTEMD_NAME = "tokenmaxxing-sync";
 const WINDOWS_TASK_NAME = "tokenmaxxing-sync";
 const POSIX_WRAPPER_NAME = "tokenmaxxing.sh";
 const LEGACY_POSIX_WRAPPER_NAME = "service-sync.sh";
 const WINDOWS_WRAPPER_NAME = "service-sync.cmd";
+const WINDOWS_LAUNCHER_NAME = "service-sync-hidden.vbs";
 const PACKAGE_NAME = "@851-labs/tokenmaxxing";
 const SERVICE_RUNNER_DIR_NAME = "service-runners";
 const SERVICE_RUNNER_POINTER_NAME = "service-runner-current";
@@ -3851,6 +3852,17 @@ exit /b %ERRORLEVEL%\r
 `;
 }
 
+function renderWindowsLauncher(): string {
+  return `Option Explicit\r
+\r
+Dim shell, scriptDirectory, command\r
+Set shell = CreateObject("WScript.Shell")\r
+scriptDirectory = CreateObject("Scripting.FileSystemObject").GetParentFolderName(WScript.ScriptFullName)\r
+command = "cmd.exe /d /c """ & scriptDirectory & "\\${WINDOWS_WRAPPER_NAME}"""\r
+WScript.Quit shell.Run(command, 0, True)\r
+`;
+}
+
 function renderWindowsLogRotation(logPath: string): string {
   const quotedLogPath = cmdQuote(logPath);
   const moves = Array.from({ length: SERVICE_LOG_ROTATIONS - 1 }, (_, index) => {
@@ -3929,7 +3941,9 @@ function writeServiceFiles(
         await rm(legacyWrapperPath, { force: true });
       }
       await writeFileAtomic(paths.wrapperPath, wrapper);
-      if (paths.backend !== "windows-task-scheduler") {
+      if (paths.backend === "windows-task-scheduler") {
+        await writeFileAtomic(windowsLauncherPath(paths), renderWindowsLauncher());
+      } else {
         await chmod(paths.wrapperPath, 0o755);
       }
       await writeFileAtomic(paths.metadataPath, `${JSON.stringify(metadata, null, 2)}\n`);
@@ -3950,6 +3964,9 @@ function removeServiceFiles(paths: ServicePaths): Effect.Effect<void, unknown> {
   return Effect.tryPromise({
     try: async () => {
       await rm(paths.wrapperPath, { force: true });
+      if (paths.backend === "windows-task-scheduler") {
+        await rm(windowsLauncherPath(paths), { force: true });
+      }
       for (const legacyWrapperPath of legacyServiceWrapperPaths(paths)) {
         await rm(legacyWrapperPath, { force: true });
       }
@@ -4017,9 +4034,13 @@ function windowsTaskCreateArgs(paths: ServicePaths): string[] {
     "/MO",
     String(SERVICE_INTERVAL_MINUTES),
     "/TR",
-    cmdQuote(paths.wrapperPath),
+    `wscript.exe //B //NoLogo ${cmdQuote(windowsLauncherPath(paths))}`,
     "/F",
   ];
+}
+
+function windowsLauncherPath(paths: ServicePaths): string {
+  return join(paths.configDir, WINDOWS_LAUNCHER_NAME);
 }
 
 function uninstallNativeScheduler(paths: ServicePaths): Effect.Effect<void, unknown> {
@@ -4432,6 +4453,7 @@ export {
   resolveServiceRunnerPackageJson,
   renderLaunchdPlist,
   renderServiceWrapper,
+  renderWindowsLauncher,
   renderSystemdTimer,
   refreshServiceAfterUpdate,
   installServiceRunner,

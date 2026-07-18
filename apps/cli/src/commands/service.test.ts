@@ -41,6 +41,7 @@ import {
   resolveExecutableSiblingPackageJson,
   renderLaunchdPlist,
   renderServiceWrapper,
+  renderWindowsLauncher,
   renderSystemdTimer,
   runServiceAutoUpdate,
   scheduleDescription,
@@ -557,6 +558,8 @@ describe("renderServiceWrapper", () => {
     expect(wrapper).toContain('move /y "%TOKENMAXXING_LOG%" "%TOKENMAXXING_LOG%.1"');
     expect(wrapper).toContain("set /p TOKENMAXXING_SERVICE_RUNNER=<");
     expect(wrapper).toContain("service run --scheduled");
+    expect(renderWindowsLauncher()).toContain("shell.Run(command, 0, True)");
+    expect(renderWindowsLauncher()).toContain("\\service-sync.cmd");
   });
 });
 
@@ -596,7 +599,7 @@ describe("native scheduler templates", () => {
       "/MO",
       "5",
       "/TR",
-      '"C:\\Users\\alex\\AppData\\Roaming\\tokenmaxxing/service-sync.cmd"',
+      'wscript.exe //B //NoLogo "C:\\Users\\alex\\AppData\\Roaming\\tokenmaxxing/service-sync-hidden.vbs"',
       "/F",
     ]);
   });
@@ -1972,7 +1975,7 @@ describe("serviceInstallProgram", () => {
       installedAt: "2026-06-16T12:00:00.000Z",
       runnerTarget: "darwin-arm64",
       runnerVersion: "0.4.17",
-      templateVersion: 5,
+      templateVersion: 6,
     });
     expect(written[0]?.metadata).not.toHaveProperty("autoUpdate");
     expect(state.logs).toContain("Automatic sync installed");
